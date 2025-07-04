@@ -1,6 +1,6 @@
 # ===== Configuration (default values) =====
-REVISION ?= 3.1.19-SNAPSHOT
-RELEASE_VERSION ?= 3.1.19
+REVISION ?= 3.1.20-SNAPSHOT
+RELEASE_VERSION ?= 3.1.20
 MAVEN_PROFILE ?= -Pdistrib
 MAVEN_INTERNAL_URL ?= https://packages.nuxeo.com/repository/maven-internal
 MAVEN_DEPLOY := -DaltDeploymentRepository=github::default::https://maven.pkg.github.com/OWNER/REPO
