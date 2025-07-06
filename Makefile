@@ -26,10 +26,10 @@ MAVEN_COMMON := -B -DskipTests -Dnuxeo.skip.enforcer=true -T6
 
 all: build-marketplace
 
-build-marketplace: _build-marketplace deploy-marketplace
+build-marketplace: _build-marketplace
 	@echo "✅ Release build successful."
 
-build-release-marketplace: set_version _build-release-marketplace deploy-marketplace reset_version
+build-release-marketplace: set_version _build-release-marketplace
 	@echo "🎉 Full release completed: built, deployed, and version reset."
 
 _build-marketplace:
@@ -71,13 +71,6 @@ test:
 	@printf '%-25s %s\n' "REVISION:" "$(REVISION)"
 	@printf '%-25s %s\n' "RELEASE_VERSION:" "$(RELEASE_VERSION)"
 	@printf '%-25s %s\n' "MAVEN_PROFILE:" "$(MAVEN_PROFILE)"
-	@printf '%-25s %s\n' "MAVEN_INTERNAL_URL:" "$(MAVEN_INTERNAL_URL)"
 	@printf '%-25s %s\n' "MAVEN_DEPLOY:" "$(MAVEN_DEPLOY)"
 	@printf '%-25s %s\n' "MAVEN_OPTS:" "$(MAVEN_OPTS)"
 	@printf '%-25s %s\n' "MAVEN_COMMON:" "$(MAVEN_COMMON)"
-	@printf '%-25s %s\n' "ORG_NAME:" "$(ORG_NAME)"
-	@printf '%-25s %s\n' "MAVEN_WEBUI_GROUP_ID:" "$(MAVEN_WEBUI_GROUP_ID)"
-	@printf '%-25s %s\n' "PACKAGE_NAME:" "$(PACKAGE_NAME)"
-	@printf '%-25s %s\n' "GITHUB_USER:" "$${GITHUB_USER:-<not set>}"
-	@printf '%-25s %s\n' "GITHUB_TOKEN:" "$$( [ -n "$$GITHUB_TOKEN" ] && echo '***' || echo '<not set>' )"
-	@printf '%-25s %s\n' "Delete script path:" "./scripts/delete-private-packages.sh"
