@@ -1,0 +1,374 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: '3'
+
+dotenv: ['.env.sample', '.env']
+
+vars:
+  # Taskfile v3 dotenv values are not available to sh: commands in vars, so we read
+  # .env directly via grep. Precedence: shell/CLI env > .env file > hardcoded default.
+  NUXEO_WEB_UI_VERSION:
+    sh: |
+      v=$(grep -m1 '^NUXEO_WEB_UI_VERSION=' .env 2>/dev/null | cut -d= -f2-)
+      echo "${NUXEO_WEB_UI_VERSION:-${v:-$(node -p "require('./package.json').version" 2>/dev/null || echo "unknown")}}"
+  NUXEO_VERSION:
+    sh: |
+      v=$(grep -m1 '^NUXEO_VERSION=' .env 2>/dev/null | cut -d= -f2-)
+      echo "${NUXEO_VERSION:-${v:-master}}"
+  NUXEO_PACKAGES:
+    sh: |
+      v=$(grep -m1 '^NUXEO_PACKAGES=' .env 2>/dev/null | cut -d= -f2-)
+      echo "${NUXEO_PACKAGES:-${v:-nuxeo-drive nuxeo-liveconnect nuxeo-template-rendering}}"
+  NUXEO_DEV_MODE:
+    sh: |
+      v=$(grep -m1 '^NUXEO_DEV_MODE=' .env 2>/dev/null | cut -d= -f2-)
+      echo "${NUXEO_DEV_MODE:-${v:-true}}"
+
+  SCM_REF:
+    sh: git rev-parse HEAD 2>/dev/null || echo "local"
+
+  NPM: npm
+  DOCKER_COMPOSE: docker-compose
+
+  MAVEN_VERSION:
+    sh: |
+      v=$(grep -m1 '^MAVEN_VERSION=' .env 2>/dev/null | cut -d= -f2-)
+      echo "${MAVEN_VERSION:-${v:-current}}"
+
+  MAVEN_HOME:
+    sh: |
+      MV=$(grep -m1 '^MAVEN_VERSION=' .env 2>/dev/null | cut -d= -f2-)
+      MV="${MAVEN_VERSION:-$MV}"
+      if [ -n "$MV" ]; then
+        echo "$HOME/.sdkman/candidates/maven/$MV"
+      else
+        echo "$HOME/.sdkman/candidates/maven/current"
+      fi
+
+  MVN: "{{.MAVEN_HOME}}/bin/mvn"
+
+  JAVA_VERSION:
+    sh: |
+      v=$(grep -m1 '^JAVA_VERSION=' .env 2>/dev/null | cut -d= -f2-)
+      echo "${JAVA_VERSION:-${v:-current}}"
+
+  # Derive JAVA_HOME from JAVA_VERSION (sdkman path) when set in .env or CLI env.
+  # Precedence: JAVA_VERSION (.env / CLI) > inherited JAVA_HOME > fallback to sdkman current.
+  JAVA_HOME:
+    sh: |
+      JV=$(grep -m1 '^JAVA_VERSION=' .env 2>/dev/null | cut -d= -f2-)
+      JV="${JAVA_VERSION:-$JV}"
+      if [ -n "$JV" ]; then
+        echo "$HOME/.sdkman/candidates/java/$JV"
+      elif [ -n "$JAVA_HOME" ]; then
+        echo "$JAVA_HOME"
+      else
+        echo "$HOME/.sdkman/candidates/java/current"
+      fi
+
+  MAVEN_OPTS:
+    sh: |
+      v=$(grep -m1 '^MAVEN_OPTS=' .env 2>/dev/null | cut -d= -f2-)
+      echo "${MAVEN_OPTS:-${v:--Xmx2g -Xms512m}}"
+
+  NODE_VERSION:
+    sh: node --version 2>/dev/null || echo "not installed"
+  NPM_VERSION:
+    sh: npm --version 2>/dev/null || echo "not installed"
+  MVN_VERSION:
+    sh: |
+      MV=$(grep -m1 '^MAVEN_VERSION=' .env 2>/dev/null | cut -d= -f2-)
+      MV="${MAVEN_VERSION:-$MV}"
+      MVN_BIN="$HOME/.sdkman/candidates/maven/${MV:-current}/bin/mvn"
+      $MVN_BIN --version 2>/dev/null | head -1 || echo "not installed"
+  DC_VERSION:
+    sh: docker-compose --version 2>/dev/null || echo "not installed"
+
+env:
+  JAVA_HOME: "{{.JAVA_HOME}}"
+  MAVEN_OPTS: "{{.MAVEN_OPTS}}"
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  # ── Installation ────────────────────────────────────────────────────────────
+
+  install:
+    desc: Install npm dependencies
+    cmds:
+      - echo "Installing npm dependencies..."
+      - "{{.NPM}} install"
+      - echo "Dependencies installed"
+
+  check-node:
+    desc: Check if Node.js is installed and print version
+    preconditions:
+      - sh: which node
+        msg: "Error: Node.js is not installed"
+    cmds:
+      - echo "Node.js {{.NODE_VERSION}}"
+
+  # ── Development ─────────────────────────────────────────────────────────────
+
+  start:
+    desc: Start development server
+    cmds:
+      - echo "Starting development server..."
+      - "{{.NPM}} run start"
+
+  start-build:
+    desc: Start HTTP server with built files
+    cmds:
+      - echo "Starting HTTP server with built files..."
+      - "{{.NPM}} run start:build"
+
+  # ── Build ────────────────────────────────────────────────────────────────────
+
+  prepare:
+    desc: Prepare build environment (i18n, workbox, etc.)
+    cmds:
+      - echo "Preparing build environment..."
+      - "{{.NPM}} run prepare:i18n"
+      - "{{.NPM}} run prepare:workbox"
+      - echo "Build environment ready"
+
+  build:
+    desc: Build the project for production
+    cmds:
+      - echo "Building project..."
+      - "{{.NPM}} run build"
+      - echo "Build complete"
+
+  build-analyze:
+    desc: Build and analyze bundle size
+    cmds:
+      - echo "Building and analyzing bundle..."
+      - "{{.NPM}} run build:analyze"
+
+  # ── Testing ──────────────────────────────────────────────────────────────────
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - echo "Running unit tests..."
+      - "{{.NPM}} run test"
+
+  test-watch:
+    desc: Run unit tests in watch mode
+    cmds:
+      - echo "Running unit tests (watch mode)..."
+      - "{{.NPM}} run test:watch"
+
+  ftest:
+    desc: Run functional tests (headless)
+    cmds:
+      - echo "Running functional tests..."
+      - "{{.NPM}} run ftest"
+
+  ftest-headful:
+    desc: Run functional tests in headful mode
+    cmds:
+      - echo "Running functional tests (headful)..."
+      - "{{.NPM}} run ftest:headful"
+
+  ftest-dev:
+    desc: Run functional tests against local dev server
+    cmds:
+      - echo "Running functional tests against dev server..."
+      - "{{.NPM}} run ftest:dev"
+
+  ftest-watch:
+    desc: Run functional tests in watch/debug mode
+    cmds:
+      - echo "Running functional tests (watch mode)..."
+      - "{{.NPM}} run ftest:watch"
+
+  # ── Lint & Format ────────────────────────────────────────────────────────────
+
+  lint:
+    desc: Run linting (ESLint + Prettier)
+    cmds:
+      - echo "Running linters..."
+      - "{{.NPM}} run lint"
+
+  lint-eslint:
+    desc: Run ESLint only
+    cmds:
+      - echo "Running ESLint..."
+      - "{{.NPM}} run lint:eslint"
+
+  lint-prettier:
+    desc: Run Prettier check only
+    cmds:
+      - echo "Running Prettier check..."
+      - "{{.NPM}} run lint:prettier"
+
+  format:
+    desc: Format code with Prettier and ESLint
+    cmds:
+      - echo "Formatting code..."
+      - "{{.NPM}} run format"
+      - echo "Formatting complete"
+
+  format-eslint:
+    desc: Format code with ESLint
+    cmds:
+      - echo "Formatting with ESLint..."
+      - "{{.NPM}} run format:eslint"
+
+  format-prettier:
+    desc: Format code with Prettier
+    cmds:
+      - echo "Formatting with Prettier..."
+      - "{{.NPM}} run format:prettier"
+
+  # ── Clean ────────────────────────────────────────────────────────────────────
+
+  clean:
+    desc: Clean build artifacts and node_modules
+    cmds:
+      - echo "Cleaning build artifacts..."
+      - rm -rf dist/ .tmp/ node_modules/ target/
+      - echo "Clean complete"
+
+  clean-dist:
+    desc: Clean dist directory only
+    cmds:
+      - echo "Cleaning dist directory..."
+      - rm -rf dist/
+
+  clean-tmp:
+    desc: Clean temporary directory only
+    cmds:
+      - echo "Cleaning temporary directory..."
+      - rm -rf .tmp/
+
+  # ── Maven ────────────────────────────────────────────────────────────────────
+
+  mvn-clean:
+    desc: Clean Maven build
+    cmds:
+      - echo "Running Maven clean..."
+      - "{{.MVN}} clean"
+
+  mvn-install:
+    desc: Build marketplace package with Maven
+    cmds:
+      - echo "Building marketplace package..."
+      - "{{.MVN}} clean install"
+      - echo "Marketplace package built"
+
+  mvn-install-ftest:
+    desc: Build marketplace package with functional tests
+    cmds:
+      - echo "Building marketplace package with functional tests..."
+      - "{{.MVN}} clean install -Pftest"
+      - echo "Marketplace package built"
+
+  mvn-install-skip:
+    desc: Build marketplace package (skip tests)
+    cmds:
+      - echo "Building marketplace package (skipping tests)..."
+      - "{{.MVN}} clean install -DskipTests"
+      - echo "Marketplace package built"
+
+  # ── Docker ───────────────────────────────────────────────────────────────────
+
+  docker-build:
+    desc: Build Docker image
+    cmds:
+      - echo "Building Docker image..."
+      - "{{.DOCKER_COMPOSE}} build"
+      - echo "Docker image built"
+
+  docker-up:
+    desc: Start Docker Compose services
+    cmds:
+      - echo "Starting Docker Compose services..."
+      - "{{.DOCKER_COMPOSE}} up"
+
+  docker-up-build:
+    desc: Build and start Docker Compose services
+    cmds:
+      - echo "Building and starting Docker Compose services..."
+      - "{{.DOCKER_COMPOSE}} up --build"
+
+  docker-up-detached:
+    desc: Start Docker Compose services in detached mode
+    cmds:
+      - echo "Starting Docker Compose services (detached)..."
+      - "{{.DOCKER_COMPOSE}} up -d"
+
+  docker-down:
+    desc: Stop Docker Compose services
+    cmds:
+      - echo "Stopping Docker Compose services..."
+      - "{{.DOCKER_COMPOSE}} down"
+
+  docker-logs:
+    desc: Show Docker Compose logs
+    cmds:
+      - "{{.DOCKER_COMPOSE}} logs -f"
+
+  docker-clean:
+    desc: Remove Docker containers, volumes, and images
+    cmds:
+      - echo "Cleaning Docker resources..."
+      - "{{.DOCKER_COMPOSE}} down -v --rmi all"
+      - echo "Docker resources cleaned"
+
+  # ── Combined ─────────────────────────────────────────────────────────────────
+
+  all:
+    desc: Clean, install dependencies, and build
+    cmds:
+      - task: clean
+      - task: install
+      - task: build
+
+  full-build:
+    desc: Full build (npm + maven)
+    cmds:
+      - task: install
+      - task: build
+      - task: mvn-install
+
+  dev:
+    desc: Install dependencies and start development server
+    cmds:
+      - task: install
+      - task: start
+
+  ci:
+    desc: CI pipeline — install, lint, test, and build
+    cmds:
+      - task: install
+      - task: lint
+      - task: test
+      - task: build
+
+  # ── Info ─────────────────────────────────────────────────────────────────────
+
+  info:
+    desc: Display project information
+    silent: true
+    cmds:
+      - echo "Nuxeo Web UI — Build Configuration"
+      - echo ""
+      - printf '%-30s %s\n' "Version:" "{{.NUXEO_WEB_UI_VERSION}}"
+      - printf '%-30s %s\n' "SCM Ref:" "{{.SCM_REF}}"
+      - printf '%-30s %s\n' "Nuxeo Version:" "{{.NUXEO_VERSION}}"
+      - printf '%-30s %s\n' "Nuxeo Packages:" "{{.NUXEO_PACKAGES}}"
+      - printf '%-30s %s\n' "Dev Mode:" "{{.NUXEO_DEV_MODE}}"
+      - echo ""
+      - printf '%-30s %s\n' "Node.js:" "{{.NODE_VERSION}}"
+      - printf '%-30s %s\n' "NPM:" "{{.NPM_VERSION}}"
+      - printf '%-30s %s\n' "Maven:" "{{.MVN_VERSION}}"
+      - printf '%-30s %s\n' "MAVEN_HOME:" "{{.MAVEN_HOME}}"
+      - printf '%-30s %s\n' "Docker Compose:" "{{.DC_VERSION}}"
+      - printf '%-30s %s\n' "JAVA_VERSION:" "{{.JAVA_VERSION}}"
+      - printf '%-30s %s\n' "JAVA_HOME:" "{{.JAVA_HOME}}"
+      - printf '%-30s %s\n' "MAVEN_OPTS:" "{{.MAVEN_OPTS}}"
