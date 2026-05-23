@@ -1,4 +1,3 @@
-// eslint-disable-next-line import/no-extraneous-dependencies
 import { Given, Then, When } from '@cucumber/cucumber';
 
 Given('provider {string} exists in providers', async (provider) =>
@@ -8,7 +7,7 @@ Given('provider {string} exists in providers', async (provider) =>
   }),
 );
 
-Then('I can see the nuxeo-cloud-providers page', async function() {
+Then('I can see the nuxeo-cloud-providers page', async function () {
   const cloudServicesEle = await this.ui.administration.cloudServices;
   await cloudServicesEle.waitForVisible();
   const nuxeoCloudProvidersPage = await cloudServicesEle.nuxeoCloudProviders.waitForVisible();
@@ -17,7 +16,7 @@ Then('I can see the nuxeo-cloud-providers page', async function() {
   }
 });
 
-Then('I can see the nuxeo-cloud-tokens page', async function() {
+Then('I can see the nuxeo-cloud-tokens page', async function () {
   const administration = await this.ui.administration;
   const cloudServicesEle = await administration.cloudServices;
   await cloudServicesEle.waitForVisible();
@@ -27,7 +26,7 @@ Then('I can see the nuxeo-cloud-tokens page', async function() {
   }
 });
 
-Then('I can see the nuxeo-oauth2-provided-tokens table', async function() {
+Then('I can see the nuxeo-oauth2-provided-tokens table', async function () {
   const administration = await this.ui.administration;
   const cloudServicesEle = await administration.cloudServices;
   await cloudServicesEle.waitForVisible();
@@ -37,7 +36,7 @@ Then('I can see the nuxeo-oauth2-provided-tokens table', async function() {
   }
 });
 
-Then('I can see the nuxeo-oauth2-consumed-tokens table', async function() {
+Then('I can see the nuxeo-oauth2-consumed-tokens table', async function () {
   const administration = await this.ui.administration;
   const cloudServicesEle = await administration.cloudServices;
   await cloudServicesEle.waitForVisible();
@@ -47,7 +46,7 @@ Then('I can see the nuxeo-oauth2-consumed-tokens table', async function() {
   }
 });
 
-Then('I can add the following provider:', async function(provider) {
+Then('I can add the following provider:', async function (provider) {
   const administration = await this.ui.administration;
   const cloudServicesEle = await administration.cloudServices;
   await cloudServicesEle.waitForVisible();
@@ -57,7 +56,7 @@ Then('I can add the following provider:', async function(provider) {
   };
 });
 
-Then('I can see {string} provider', async function(name) {
+Then('I can see {string} provider', async function (name) {
   const administration = await this.ui.administration;
   const cloudServicesEle = await administration.cloudServices;
   await cloudServicesEle.waitForVisible();
@@ -67,7 +66,7 @@ Then('I can see {string} provider', async function(name) {
   }
 });
 
-Then('I cannot see {string} provider', async function(name) {
+Then('I cannot see {string} provider', async function (name) {
   const administration = await this.ui.administration;
   const cloudServicesEle = await administration.cloudServices;
   await cloudServicesEle.waitForVisible();
@@ -77,7 +76,7 @@ Then('I cannot see {string} provider', async function(name) {
   }
 });
 
-Then('I can edit {string} provider to:', async function(currentName, newDetails) {
+Then('I can edit {string} provider to:', async function (currentName, newDetails) {
   const administration = await this.ui.administration;
   const cloudServicesEle = await administration.cloudServices;
   await cloudServicesEle.waitForVisible();
@@ -88,7 +87,7 @@ Then('I can edit {string} provider to:', async function(currentName, newDetails)
   };
 });
 
-Then('I can delete {string} provider', async function(name) {
+Then('I can delete {string} provider', async function (name) {
   const administration = await this.ui.administration;
   const cloudServicesEle = await administration.cloudServices;
   await cloudServicesEle.waitForVisible();
@@ -96,7 +95,7 @@ Then('I can delete {string} provider', async function(name) {
   delete global.providers[name];
 });
 
-When('I click the {string} pill', async function(name) {
+When('I click the {string} pill', async function (name) {
   const administration = await this.ui.administration;
   const cloudServicesEle = await administration.cloudServices;
   await cloudServicesEle.waitForVisible();
@@ -112,7 +111,7 @@ Given('Client {string} exists in clients', async (clientId) =>
   }),
 );
 
-Then('I can see the nuxeo-cloud-consumers page', async function() {
+Then('I can see the nuxeo-cloud-consumers page', async function () {
   const administration = await this.ui.administration;
   const cloudServicesEle = await administration.cloudServices;
   await cloudServicesEle.waitForVisible();
@@ -123,7 +122,7 @@ Then('I can see the nuxeo-cloud-consumers page', async function() {
   }
 });
 
-Then('I can add the following client:', async function(client) {
+Then('I can add the following client:', async function (client) {
   const administration = await this.ui.administration;
   const cloudServicesEle = await administration.cloudServices;
   await cloudServicesEle.waitForVisible();
@@ -133,7 +132,7 @@ Then('I can add the following client:', async function(client) {
   };
 });
 
-Then('I can see {string} client', async function(clientId) {
+Then('I can see {string} client', async function (clientId) {
   const administration = await this.ui.administration;
   const cloudServicesEle = await administration.cloudServices;
   await cloudServicesEle.waitForVisible();
@@ -143,7 +142,7 @@ Then('I can see {string} client', async function(clientId) {
   }
 });
 
-Then('I cannot see {string} client', async function(clientId) {
+Then('I cannot see {string} client', async function (clientId) {
   const administration = await this.ui.administration;
   const cloudServicesEle = await administration.cloudServices;
   await cloudServicesEle.waitForVisible();
@@ -153,7 +152,7 @@ Then('I cannot see {string} client', async function(clientId) {
   }
 });
 
-Then('I can edit {string} client to:', async function(currentClientId, newDetails) {
+Then('I can edit {string} client to:', async function (currentClientId, newDetails) {
   const cloudServicesEle = await this.ui.administration.cloudServices;
   await cloudServicesEle.waitForVisible();
   await cloudServicesEle.editClient(currentClientId, newDetails);
@@ -163,7 +162,7 @@ Then('I can edit {string} client to:', async function(currentClientId, newDetail
   };
 });
 
-Then('I can delete {string} client', async function(clientId) {
+Then('I can delete {string} client', async function (clientId) {
   const cloudServicesEle = await this.ui.administration.cloudServices;
   await cloudServicesEle.waitForVisible();
   await cloudServicesEle.deleteClient(clientId);

@@ -53,6 +53,17 @@ Polymer({
         min-height: calc(200vh - 280px);
       }
 
+      /* Allow long values (e.g. labels) to wrap onto multiple lines instead of being truncated */
+      nuxeo-data-table-cell:not([header]) {
+        white-space: normal;
+        word-break: break-word;
+        overflow-x: visible;
+        overflow-y: visible;
+        align-items: flex-start;
+        padding-top: 12px;
+        padding-bottom: 12px;
+      }
+
       .top.actions {
         @apply --layout-horizontal;
         @apply --layout-center;
@@ -120,13 +131,12 @@ Polymer({
             empty-label-when-filtered="[[i18n('vocabularyManagement.noEntryWhenFiltered')]]"
             style$="[[_visibleDataTableStyle(entries)]]"
             caption-text="[[i18n('table.caption.vocabulary')]]"
+            column-resize-enabled
           >
             <template is="dom-repeat" items="[[colDef]]" as="col">
               <nuxeo-data-table-column name="[[i18n(col.name)]]" key="[[col.key]]">
                 <template>
-                  <template is="dom-if" if="[[!_entryActions(column.key)]]">
-                    [[_value(index, column.key)]]
-                  </template>
+                  <template is="dom-if" if="[[!_entryActions(column.key)]]"> [[_value(index, column.key)]] </template>
                   <template is="dom-if" if="[[_entryActions(column.key)]]">
                     <paper-icon-button
                       id="edit-button-[[index]]"
@@ -453,7 +463,7 @@ Polymer({
         schemaDataCache[schema] = fields;
         return fields;
       })
-      .catch(function(error) {
+      .catch(function (error) {
         this.notify({ message: this.i18n('vocabularyManagement.cannotGetSchema') });
         if (error.status !== 404) {
           throw error;

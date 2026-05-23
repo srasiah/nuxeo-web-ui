@@ -176,6 +176,10 @@ Polymer({
       #actionsDropdown {
         width: 82%;
         padding: 19px 0 0 0;
+        --selectivity-dropdown-min-width: auto;
+        --selectivity-dropdown-max-width: 100%;
+        --selectivity-result-item-white-space: normal;
+        --selectivity-result-item-word-wrap: break-word;
       }
 
       #actionsDropdown > .iron-selected {
@@ -561,7 +565,22 @@ Polymer({
     paramMutator: {
       type: Function,
       value() {
-        return function(params, modifyPayload = false) {
+        // Walks the parent chain of a vocabulary entry and reconstructs the full hierarchical path string.
+        // Handles properties.parent as a string id, an object with .id, or an object with .properties.id.
+        function toHierarchicalPath(entry) {
+          let output = entry.id;
+          let current = entry;
+          while (current && current.properties && current.properties.parent) {
+            const parent = current.properties.parent;
+            const parentId = typeof parent === 'string' ? parent : (parent.id ?? parent?.properties?.id);
+            if (!parentId) break;
+            output = `${parentId}`.concat('/', `${output}`);
+            current = typeof parent === 'string' ? null : parent;
+          }
+          return output;
+        }
+
+        return function (params, modifyPayload = false) {
           const result = {};
           if (params) {
             // filter null values
@@ -569,14 +588,12 @@ Polymer({
               const value = params[param];
               if (value !== null && param !== 'dc:title') {
                 if (modifyPayload && Array.isArray(value)) {
-                  result[param] = value.map((item) => {
-                    let output = item.id ? item.id : item;
-                    while (item && item.properties && item.properties.parent) {
-                      output = `${item.properties.parent.id}`.concat('/', `${output}`);
-                      item = item.properties.parent;
-                    }
-                    return output;
-                  });
+                  result[param] = value.map((item) =>
+                    item && item.id && item.properties ? toHierarchicalPath(item) : item,
+                  );
+                } else if (modifyPayload && value && typeof value === 'object' && value.id && value.properties) {
+                  // Single-select hierarchical vocabulary: reconstruct full path (e.g. "parent/child")
+                  result[param] = toHierarchicalPath(value);
                 } else {
                   result[param] = typeof value === 'boolean' ? value.toString() : value;
                 }
@@ -640,6 +657,7 @@ Polymer({
     results: {
       type: Object,
       notify: true,
+      observer: '_resultsElementChanged',
     },
 
     /**
@@ -793,12 +811,13 @@ Polymer({
   _selectedSearchIdxChanged() {
     // Convert index → object
     const idx = this.selectedSearchIdx - 1;
-    const search = this._searches?.[idx] || null;
+    const search = (this._searches && this._searches[idx]) || null;
 
     if (search) {
       this.isSavedSearch = this._isSavedSearch();
       this.selectedSearch = search;
-      this.params = this._mutateParams(search.params, true);
+      const clonedParams = JSON.parse(JSON.stringify(search.params));
+      this.params = this._mutateParams(clonedParams, true);
       this._navigateToResults();
     } else {
       this._clear();
@@ -814,7 +833,7 @@ Polymer({
     }
 
     // Extract ID (works for object or string)
-    const id = typeof selectedSearch === 'string' ? selectedSearch : selectedSearch?.id;
+    const id = typeof selectedSearch === 'string' ? selectedSearch : selectedSearch && selectedSearch.id;
 
     // Find index in saved searches
     const idx = this._searches.findIndex((s) => s.id === id);
@@ -832,13 +851,35 @@ Polymer({
 
     // Populate params
     const search = this._searches[idx];
-    this.params = this._mutateParams(search.params);
-    this.searchTerm = this.params?.ecm_fulltext?.replace(/\*/g, '') || '';
+    const clonedParams = JSON.parse(JSON.stringify(search.params));
+    this.params = this._mutateParams(clonedParams, true);
+    this.searchTerm = this.params && this.params.ecm_fulltext ? this.params.ecm_fulltext.replace(/\*/g, '') : '';
 
     // Ensure form stays synced
     if (this.form) {
       this.form.searchTerm = this.searchTerm;
     }
+  },
+
+  _resultsElementChanged(results, oldResults) {
+    if (oldResults && typeof oldResults.addEventListener === 'function') {
+      this.unlisten(oldResults, 'quick-filters-changed', '_syncQuickFiltersFromResults');
+    }
+    if (results && typeof results.addEventListener === 'function') {
+      this.listen(results, 'quick-filters-changed', '_syncQuickFiltersFromResults');
+    }
+  },
+
+  _syncQuickFiltersFromResults(e) {
+    const quickFilters =
+      (Array.isArray(e?.detail?.value) && e.detail.value) ||
+      (Array.isArray(e?.target?.quickFilters) && e.target.quickFilters) ||
+      (this.results && Array.isArray(this.results.quickFilters) && this.results.quickFilters) ||
+      [];
+
+    const clonedQuickFilters = quickFilters.slice();
+    this.set('_quickFilters', clonedQuickFilters);
+    this.$.provider.quickFilters = clonedQuickFilters.slice();
   },
 
   _computeData(searches) {
@@ -905,7 +946,9 @@ Polymer({
       const _el = this.$['saved-search'];
       _el.searchId = this.selectedSearch.id;
       _el.get().then((response) => {
-        this.params = this._mutateParams(response.params);
+        const clonedParams = JSON.parse(JSON.stringify(response.params));
+        this.params = this._mutateParams(clonedParams, true);
+
         this.searchTerm = this.params.ecm_fulltext ? this.params.ecm_fulltext.replace(/\*/g, '') : '';
         this.form.searchTerm = this.searchTerm;
         this.dirty = false;
@@ -985,7 +1028,7 @@ Polymer({
         _el.data.title = this.$.savedSearchRenameTitle.value;
         _el.data.params = this._mutateParams(_el.data.params);
       } else {
-        _el.data.params = this.params;
+        _el.data.params = this._mutateParams(this.params, true);
       }
       _el.put().then(() => {
         if (this._renaming) {

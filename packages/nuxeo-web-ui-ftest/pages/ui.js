@@ -107,10 +107,21 @@ export default class UI extends BasePage {
 
   static get() {
     return (async () => {
-      url(process.env.NUXEO_URL ? '' : 'ui');
+      await url(process.env.NUXEO_URL ? '' : 'ui');
       if (!(await global.locale)) {
-        await $('nuxeo-app:not([unresolved])').waitForVisible();
-        const locale = await browser.execute(async () => (await window.nuxeo.I18n.language) || 'en');
+        await $('nuxeo-app').waitForDisplayed({ timeout: 60000 });
+        await browser.waitUntil(async () => $('nuxeo-app').then((el) => el.isDisplayed()), {
+          timeout: 60000,
+          interval: 300,
+          timeoutMsg: 'nuxeo-app exists but never became visible',
+        });
+
+        await browser.waitUntil(async () => browser.execute(() => !!window.nuxeo), {
+          timeout: 30000,
+          timeoutMsg: 'window.nuxeo not available',
+        });
+
+        const locale = await browser.execute(() => window.nuxeo.I18n.language || 'en');
         if (locale) {
           global.locale = locale;
           await moment.locale(global.locale);
@@ -228,11 +239,19 @@ export default class UI extends BasePage {
 
   async getToastMessage(message) {
     let snackBarText;
+
+    const selector = '#snackbarPanel mwc-snackbar[open] .mdc-snackbar__label';
+    const trimmedMessage = message.trim().replace(/"/g, '');
+
     await driver.waitUntil(
       async () => {
-        const snackBar = await this.el.element('#snackbarPanel mwc-snackbar[open] .mdc-snackbar__label');
+        const snackBar = await $(selector);
+
+        if (!(await snackBar.isExisting())) {
+          return false;
+        }
+
         snackBarText = await snackBar.getText();
-        const trimmedMessage = message.trim().replace(/"/g, '');
         return snackBarText === trimmedMessage;
       },
       {

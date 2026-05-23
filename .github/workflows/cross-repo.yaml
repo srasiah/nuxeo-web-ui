@@ -52,27 +52,36 @@ jobs:
   id:
     name: Remote Caller ID ${{ github.event.inputs.caller_id }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: ${{ github.event.inputs.id }}
-        run: echo run identifier ${{ github.event.inputs.id }}
+      - env:
+          CALLER_ID: ${{ github.event.inputs.caller_id }}
+        run: echo "run identifier $CALLER_ID"
+
   build:
     name: Build
     needs: id
-    runs-on: [ self-hosted, master ]
-    steps:
-      - name: Build parameters
-        run: echo '${{ toJSON(github.event.inputs) }}'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
-      - uses: actions/setup-node@v3
+    steps:
+      - uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
+      - name: Build parameters
+        env:
+          BUILD_PARAMS: ${{ toJSON(github.event.inputs) }}
+        run: echo "$BUILD_PARAMS"
+
+      - uses: actions/setup-node@v6
         with:
           registry-url: ${{ env.NPM_REPOSITORY }}
+          always-auth: true
           scope: '@nuxeo'
           node-version: 22
-      
-      - uses: actions/setup-java@v4
-        with: 
-          distribution: 'zulu'
-          java-version: '21'
 
       - name: Determine nuxeo-web-ui branch to use
         uses: nuxeo/ui-team-gh-actions/get-branch@ca09d5c52a62e297502d3572c36d813be927982a
@@ -91,31 +100,36 @@ jobs:
           default-branch: ${{ env.REFERENCE_BRANCH }}
 
       - name: Checkout nuxeo-web-ui repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
         with:
           repository: nuxeo/nuxeo-web-ui
           ref: ${{ steps.pick_nuxeo_web_ui_branch.outputs.branch }}
+
+      - name: Setup Maven build
+        uses: nuxeo/gh-build-tools/.github/actions/setup-maven-build@v0.10.4
+        with:
+          java-version: '21'
 
       - name: Install Web UI
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
         run: |
-          npm install
+          npm ci --ignore-scripts
           pushd packages/nuxeo-web-ui-ftest
-          npm install
+          npm ci
           popd
           pushd plugin/a11y
-          npm install
+          npm ci
           popd
           pushd packages/nuxeo-designer-catalog
-          npm install
+          npm ci
           popd
 
       - name: Lint Web UI
         run: npm run lint
 
       - name: Checkout the nuxeo-elements repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
         with:
           repository: nuxeo/nuxeo-elements
           path: nuxeo-elements
@@ -142,19 +156,9 @@ jobs:
           popd
           popd
 
-      - name: Add .npmrc
-        run: |
-          pushd /tmp/_temp/
-          rm .npmrc
-          touch .npmrc
-          popd
-          echo '
-           packages.nuxeo.com/repository/npm-public/:_auth=${NODE_AUTH_TOKEN}
-           @nuxeo:registry=https://packages.nuxeo.com/repository/npm-public/
-           always-auth=true
-          ' >> /tmp/_temp/.npmrc
-
       - name: Link elements to Web UI
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
         run: |
           npm install --no-package-lock --@nuxeo:registry="${{ env.NPM_REPOSITORY }}" nuxeo-elements/core/${ELEMENTS_CORE}
           npm install --no-package-lock --@nuxeo:registry="${{ env.NPM_REPOSITORY }}" nuxeo-elements/ui/${ELEMENTS_UI}
@@ -172,34 +176,26 @@ jobs:
           SAUCE_ACCESS_KEY: ${{ secrets.SAUCE_ACCESS_KEY }}
         run: npm run test
 
-      - name: 'Update settings.xml with server configuration'
-        run: |
-          echo '<settings>
-              <servers>
-                <server>
-                  <id>maven-internal</id>
-                  <username>${{ secrets.PACKAGES_AUTH_USER }}</username>
-                  <password>${{ secrets.PACKAGES_AUTH_TOKEN }}</password>
-                </server>
-              </servers>
-              </settings>' > ~/.m2/settings.xml
-              
       - name: Nuxeo package build and Ftests
         env:
+          MVN_REPO_USERNAME: ${{ secrets.REPOSITORY_MANAGER_USERNAME }}
+          MVN_REPO_PASSWORD: ${{ secrets.REPOSITORY_MANAGER_PASSWORD }}
           RUN_ALL: ${{ github.event.inputs.run_all }}
           BAIL: ${{ github.event.inputs.bail }}
-        run: | 
+          SKIP_FTESTS: ${{ github.event.inputs.skip_ftests }}
+          GENERATE_METRICS: ${{ github.event.inputs.generate_metrics }}
+        run: |
           profiles=()
-          if [ ${{ github.event.inputs.skip_ftests }} = "false" ]
-          then 
-            profiles+=('ftest') 
+          if [ "$SKIP_FTESTS" = "false" ]
+          then
+            profiles+=('ftest')
           fi
-          if ${{ github.event.inputs.generate_metrics }}
-          then 
-            profiles+=('metrics') 
+          if [ "$GENERATE_METRICS" = "true" ]
+          then
+            profiles+=('metrics')
           fi
           active_profiles=""
-          if [ ${#profiles[@]} -gt 0 ] 
+          if [ ${#profiles[@]} -gt 0 ]
           then
             active_profiles="-P$(printf -v active_profiles '%s,' "${profiles[@]}" && echo "${active_profiles%,}")"
           fi
@@ -207,27 +203,28 @@ jobs:
 
       - name: A11y checks
         if: ${{ github.event.inputs.skip_a11y == 'false' }}
-        run: |
-          mvn -B -nsu -f plugin/a11y -ntp install
+        env:
+          MVN_REPO_USERNAME: ${{ secrets.REPOSITORY_MANAGER_USERNAME }}
+          MVN_REPO_PASSWORD: ${{ secrets.REPOSITORY_MANAGER_PASSWORD }}
+        run: mvn -B -nsu -f plugin/a11y -ntp install
 
       - name: Archive cucumber reports
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
           name: cucumber-reports
-          path: |
-            ftest/target/cucumber-reports/
+          path: ftest/target/cucumber-reports/
 
       - name: Archive screenshots
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        if: failure()
+        uses: actions/upload-artifact@v7
         with:
           name: screenshots
           path: ftest/target/screenshots/
 
       - name: Archive logs
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
           name: logs
           path: |
@@ -235,8 +232,8 @@ jobs:
             **/nxserver/config/distribution.properties
 
       - name: Archive packages
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
           name: packages
           path: |

@@ -66,6 +66,8 @@ limitations under the License.
         settings-enabled
         empty-label="[[i18n('searchResults.noResults')]]"
         selection-enabled
+        column-resize-enabled
+        column-reorder-enabled
         on-row-clicked="_navigate"
         caption-text="[[i18n('nxqlSearch.heading')]]"
       >
@@ -96,9 +98,7 @@ limitations under the License.
           sort-by="file:content/length"
           flex="10"
         >
-          <template>
-            [[formatSize(item.properties.file:content.length)]]
-          </template>
+          <template> [[formatSize(item.properties.file:content.length)]] </template>
         </nuxeo-data-table-column>
 
         <nuxeo-data-table-column name="[[i18n('label.type')]]" field="type" hidden>
@@ -136,9 +136,7 @@ limitations under the License.
         </nuxeo-data-table-column>
 
         <nuxeo-data-table-column name="[[i18n('label.version')]]" field="versionLabel" hidden>
-          <template>
-            [[formatVersion(item)]]
-          </template>
+          <template> [[formatVersion(item)]] </template>
         </nuxeo-data-table-column>
 
         <nuxeo-data-table-column

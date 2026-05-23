@@ -3,20 +3,19 @@
   <parent>
     <groupId>org.nuxeo</groupId>
     <artifactId>nuxeo-parent</artifactId>
-    <version>2025.9-SNAPSHOT</version>
+    <version>2025.12</version>
   </parent>
-
-  <properties>
-    <revision>2025.9.0-SNAPSHOT</revision>
-    <nuxeo.target.version>2025.*</nuxeo.target.version>
-  </properties>
 
   <groupId>org.nuxeo.web.ui</groupId>
   <artifactId>nuxeo-web-ui-parent</artifactId>
   <packaging>pom</packaging>
   <name>Nuxeo Web UI - Parent</name>
   <description>Nuxeo Web UI - Parent</description>
-  <version>${revision}</version>
+  <version>2025.16.0-SNAPSHOT</version>
+
+  <properties>
+    <nuxeo.target.version>2025.*</nuxeo.target.version>
+  </properties>
 
   <modules>
     <module>plugin/web-ui/addon</module>

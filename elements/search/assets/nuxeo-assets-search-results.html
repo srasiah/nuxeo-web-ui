@@ -39,6 +39,8 @@ limitations under the License.
         settings-enabled
         empty-label="[[i18n('searchResults.noResults')]]"
         selection-enabled
+        column-resize-enabled
+        column-reorder-enabled
         display-quick-filters
         on-row-clicked="_navigate"
         caption-text="[[i18n('assetsSearch.heading')]]"
@@ -90,9 +92,7 @@ limitations under the License.
         </nuxeo-data-table-column>
 
         <nuxeo-data-table-column name="[[i18n('label.version')]]" field="versionLabel" hidden>
-          <template>
-            [[formatVersion(item)]]
-          </template>
+          <template> [[formatVersion(item)]] </template>
         </nuxeo-data-table-column>
 
         <nuxeo-data-table-column name="[[i18n('label.dublincore.created')]]" field="dc:created" flex="50" hidden>
@@ -145,9 +145,7 @@ limitations under the License.
             </template>
             <template is="dom-if" if="[[isFavorite(item)]]">
               <iron-icon id="favorite" icon="nuxeo:favorites"></iron-icon>
-              <nuxeo-tooltip for="favorite">
-                [[i18n('documentContentView.datatable.flags.favorite')]]
-              </nuxeo-tooltip>
+              <nuxeo-tooltip for="favorite"> [[i18n('documentContentView.datatable.flags.favorite')]] </nuxeo-tooltip>
             </template>
             <template is="dom-if" if="[[_contentStoredInColdStorage(item)]]">
               <iron-icon id="coldStorage" icon="nuxeo:coldstorage"></iron-icon>

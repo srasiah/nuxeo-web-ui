@@ -1,7 +1,6 @@
-// eslint-disable-next-line import/no-extraneous-dependencies
 import { Given, Then, When } from '@cucumber/cucumber';
 
-Then('I can see the administration menu', async function() {
+Then('I can see the administration menu', async function () {
   const { drawer } = this.ui;
   const element = await drawer.administration;
   const isVisible = element.waitForVisible();
@@ -10,7 +9,7 @@ Then('I can see the administration menu', async function() {
   }
 });
 
-Then('I cannot see the administration button', async function() {
+Then('I cannot see the administration button', async function () {
   const button = await this.ui.adminButton;
   const isVisible = await button.isVisible();
   if (isVisible) {
@@ -21,21 +20,19 @@ Then('I cannot see the administration button', async function() {
 // XXX: this.ui.drawer.administration.click()
 When('I click {string} in the administration menu', async (text) => {
   const el = await driver.$(`nuxeo-menu-item[name="${text}"]`);
-  setTimeout(async () => {
-    await el.waitForVisible();
-    el.click();
-  }, 4000);
+  await el.waitForDisplayed({ timeout: 5000 });
+  await el.click();
 });
 
-Then('I can see the analytics page', async function() {
+Then('I can see the analytics page', async function () {
   await this.ui.administration.analytics;
 });
 
-Then('I can see the users and groups page', async function() {
+Then('I can see the users and groups page', async function () {
   await this.ui.administration.userAndGroupManagement;
 });
 
-Then('I can see the vocabulary page', async function() {
+Then('I can see the vocabulary page', async function () {
   const adminstration = await this.ui.administration;
   const vocabManagement = await adminstration.vocabularyManagement;
   const isVisible = await vocabManagement.waitForVisible();
@@ -44,7 +41,7 @@ Then('I can see the vocabulary page', async function() {
   }
 });
 
-Then('I can see the audit page', async function() {
+Then('I can see the audit page', async function () {
   const ui = await this.ui;
   const admin = await ui.administration;
   const auditPage = await admin.audit;
@@ -54,23 +51,23 @@ Then('I can see the audit page', async function() {
   }
 });
 
-Then('I can see the nxql search page', async function() {
+Then('I can see the nxql search page', async function () {
   await this.ui.administration.nxqlSearch;
 });
 
-Then('I can see the cloud services page', async function() {
+Then('I can see the cloud services page', async function () {
   const isVisible = await this.ui.administration.cloudServices.waitForVisible();
   if (!isVisible) {
     throw new Error('Expected cloud services page to be visible');
   }
 });
 
-Given('I am on cloud services page', async function() {
+Given('I am on cloud services page', async function () {
   await this.ui.administration.goToCloudServices();
 });
 
 // ¯\_(ツ)_/¯ no way to escape a / character in cucumber expressions
-When(/^I click the new user\/group button$/, async function() {
+When(/^I click the new user\/group button$/, async function () {
   const adminEle = await this.ui.administration;
   const userGroupEle = await adminEle.userGroupCreateButton;
   await userGroupEle.waitForVisible();

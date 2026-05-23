@@ -4,16 +4,15 @@ on:
   pull_request:
     branches:
       - lts-2025
+
   workflow_call:
     inputs:
       branch:
-        description: 'The current branch'
-        default: lts-2025
+        description: 'Branch to lint'
         type: string
         required: false
     secrets:
       NPM_PACKAGES_TOKEN:
-        description: 'NPM_PACKAGES_TOKEN'
         required: true
 
 env:
@@ -22,21 +21,32 @@ env:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.BRANCH_NAME }}
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v6
         with:
           registry-url: 'https://packages.nuxeo.com/repository/npm-public/'
           node-version: 22
           scope: '@nuxeo'
 
+      - name: Cache npm dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('package.json', 'packages/nuxeo-web-ui-ftest/package.json', 'packages/nuxeo-designer-catalog/package.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
+
       - name: Install
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm install
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
+        run: npm ci --ignore-scripts
 
       - name: Lint
         run: npm run lint

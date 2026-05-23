@@ -49,8 +49,9 @@ window.nuxeo.I18n.en['label.dublincore.expire'] = 'Expires';
 window.nuxeo.I18n.en['label.dublincore.nature'] = 'Nature';
 window.nuxeo.I18n.en['label.dublincore.subjects'] = 'Subjects';
 
-Nuxeo = Nuxeo || {};
-Nuxeo.LayoutBehavior = LayoutBehavior;
+const _nxRoot = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : {};
+_nxRoot.Nuxeo = _nxRoot.Nuxeo || {};
+_nxRoot.Nuxeo.LayoutBehavior = LayoutBehavior;
 
 // XXX Copied from https://github.com/nuxeo/nuxeo-elements/blob/lts-2025/ui/test/ui-test-helpers.js
 // should be refactored and moved to the public helpers in nuxeo-elements (see ELEMENTS-1437 & WEBUI-604)
@@ -139,17 +140,15 @@ suite('nuxeo-edit-documents-button', () => {
 
   const buildButton = async (layoutId = 'default') => {
     const documents = ['the content of this array is irrelevant'];
-    const actionButton = await fixture(
-      html`
-        <nuxeo-edit-documents-button
-          href-base="${baseUrl}"
-          layout="${layoutId}"
-          .documents="${documents}"
-          ._fetchSchemas="${schemas}"
-        >
-        </nuxeo-edit-documents-button>
-      `,
-    );
+    const actionButton = await fixture(html`
+      <nuxeo-edit-documents-button
+        href-base="${baseUrl}"
+        layout="${layoutId}"
+        .documents="${documents}"
+        ._fetchSchemas="${schemas}"
+      >
+      </nuxeo-edit-documents-button>
+    `);
     const bulkLayout = actionButton.$$('nuxeo-layout');
     if (!bulkLayout.element) {
       await waitForLayoutLoad(bulkLayout);

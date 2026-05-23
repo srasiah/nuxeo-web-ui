@@ -3,78 +3,116 @@ name: A11y
 on:
   pull_request:
     branches:
+      - maintenance-3.1.x
       - lts-2025
+
   workflow_call:
     inputs:
       branch:
-        description: 'The current branch'
-        default: lts-2025
+        description: 'Branch to build'
         type: string
         required: false
     secrets:
       NPM_PACKAGES_TOKEN:
-        description: 'NPM_PACKAGES_TOKEN'
         required: true
-      PACKAGES_AUTH_USER:
-        description: 'PACKAGES_AUTH_USER'
+      REPOSITORY_MANAGER_USERNAME:
         required: true
-      PACKAGES_AUTH_TOKEN:
-        description: 'PACKAGES_AUTH_TOKEN'
+      REPOSITORY_MANAGER_PASSWORD:
         required: true
 
 env:
-  REFERENCE_BRANCH: lts-2025
   NPM_REPOSITORY: https://packages.nuxeo.com/repository/npm-public/
-  BRANCH_NAME: ${{ github.head_ref || inputs.branch || 'lts-2025' }}
 
 jobs:
   a11y:
-    runs-on: [self-hosted, master]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
     steps:
-      - uses: actions/checkout@v2
+      - name: Debug
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Base branch: ${{ github.base_ref }}"
+          echo "Ref: ${{ github.ref }}"
+
+      - uses: catchpoint/workflow-telemetry-action@v2
         with:
-          ref: ${{ env.BRANCH_NAME }}
+          comment_on_pr: false
 
-      - run: git config user.name "nuxeo-webui-jx-bot" && git config user.email "webui@hyland.com"
+      - name: Checkout code
+        uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v3
+      - name: Run git config
+        run: git config user.name "nuxeo-webui-jx-bot" && git config user.email "webui@hyland.com"
+
+      - uses: actions/setup-node@v6
         with:
           registry-url: ${{ env.NPM_REPOSITORY }}
           node-version: 22
           scope: '@nuxeo'
 
+      - name: Setup Maven build
+        uses: nuxeo/gh-build-tools/.github/actions/setup-maven-build@v0.10.4
+        with:
+          java-version: ${{ (github.base_ref || inputs.branch || github.ref_name) == 'lts-2025' && 21 || 17 }}
+
+      - name: Purge cached Nuxeo artifacts
+        run: rm -rf ~/.m2/repository/org/nuxeo
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('package.json', 'packages/nuxeo-web-ui-ftest/package.json', 'packages/nuxeo-designer-catalog/package.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
+
       - name: Install Web UI
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
         run: |
-          npm cache clean -f 
-          npm install
+          npm ci --ignore-scripts
           pushd packages/nuxeo-web-ui-ftest
-          npm install
+          npm ci
           popd
           pushd packages/nuxeo-designer-catalog
-          npm install
+          npm ci
           popd
 
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '21'
-
-      - name: 'Update settings.xml with server configuration'
+      - name: Ensure latest @nuxeo RC packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
         run: |
-          echo '<settings>
-              <servers>
-                <server>
-                  <id>maven-internal</id>
-                  <username>${{ secrets.PACKAGES_AUTH_USER }}</username>
-                  <password>${{ secrets.PACKAGES_AUTH_TOKEN }}</password>
-                </server>
-              </servers>
-              </settings>' > ~/.m2/settings.xml
+          ELEMENTS_VERSION=$(
+            for pkg in @nuxeo/nuxeo-elements @nuxeo/nuxeo-ui-elements @nuxeo/nuxeo-dataviz-elements @nuxeo/testing-helpers; do
+              npm view "$pkg" versions --json | jq -r '.[]'
+            done | grep -E "2025\.[0-9]+\.[0-9]+-rc\.[0-9]+$" \
+                 | sort | uniq -c | awk '$1 == 4 {print $2}' | sort -V | tail -n1
+          )
+          echo "Resolved latest nuxeo-elements RC: $ELEMENTS_VERSION"
+          if [ -z "$ELEMENTS_VERSION" ]; then
+            echo "::error::Could not resolve a common RC version across all @nuxeo packages"
+            exit 1
+          fi
+
+          npm install --no-package-lock \
+            @nuxeo/nuxeo-elements@"$ELEMENTS_VERSION" \
+            @nuxeo/nuxeo-ui-elements@"$ELEMENTS_VERSION" \
+            @nuxeo/nuxeo-dataviz-elements@"$ELEMENTS_VERSION" \
+            @nuxeo/testing-helpers@"$ELEMENTS_VERSION"
 
       - name: Web UI build
-        run: mvn -B -ntp install -X
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
+          MVN_REPO_USERNAME: ${{ secrets.REPOSITORY_MANAGER_USERNAME }}
+          MVN_REPO_PASSWORD: ${{ secrets.REPOSITORY_MANAGER_PASSWORD }}
+        run: mvn -B -ntp install
 
       - name: A11y checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
+          MVN_REPO_USERNAME: ${{ secrets.REPOSITORY_MANAGER_USERNAME }}
+          MVN_REPO_PASSWORD: ${{ secrets.REPOSITORY_MANAGER_PASSWORD }}
         run: mvn -B -ntp -f plugin/a11y install

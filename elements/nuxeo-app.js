@@ -113,7 +113,7 @@ Polymer({
       :host {
         --app-header-background-rear-layer: {
           -webkit-overflow-scrolling: auto;
-        }
+        };
       }
 
       /* Layout base */
@@ -136,6 +136,7 @@ Polymer({
         flex-direction: column;
         background: var(--nuxeo-page-background);
         height: 100%;
+        overflow: hidden;
       }
 
       main {
@@ -782,10 +783,6 @@ Polymer({
     this.$.drawerMenu.opened = false; // close
     this.drawerWidth = this.sidebarWidth = getComputedStyle(this).getPropertyValue('--nuxeo-sidebar-width');
 
-    this.$.drawerPanel.addEventListener('opened-changed', () => {
-      window.dispatchEvent(new Event('resize'));
-    });
-
     const { toast } = this.$;
     // HACK - by changing the position to relative, we can stack snackbars (and tweak the internal label)
     // HACK - hardcode the fixed width for the internal panel
@@ -802,7 +799,7 @@ Polymer({
     });
 
     // NXP-25311: stop loading bar if an error occurs
-    window.onerror = function() {
+    window.onerror = function () {
       this.loading = false;
     }.bind(this);
 
@@ -812,6 +809,43 @@ Polymer({
     this.$.menu.addEventListener('keyup', (event) => {
       this._toggleDrawer(event, { detail: { selected: event.target.getAttribute('name') } });
     });
+
+    // fire resize event during drawer animation for elements that need to adapt to size changes (nuxeo-data-table etc)
+    const { drawer } = this.$;
+    drawer.addEventListener('transitionrun', () => {
+      this._resizeDuringAnimation();
+    });
+    drawer.addEventListener('transitionstart', () => {
+      this._resizeDuringAnimation();
+    });
+  },
+
+  _resizeDuringAnimation() {
+    // continuously fire resize during animation
+    if (this._resizeLoop) {
+      cancelAnimationFrame(this._resizeLoop);
+    }
+
+    const loop = () => {
+      window.dispatchEvent(new Event('resize'));
+      this._resizeLoop = requestAnimationFrame(loop);
+    };
+
+    // start loop
+    this._resizeLoop = requestAnimationFrame(loop);
+
+    // stop loop after animation completes, cleanup and do one final resize
+    const { drawer } = this.$;
+    drawer.addEventListener(
+      'transitionend',
+      () => {
+        cancelAnimationFrame(this._resizeLoop);
+        this._resizeLoop = null;
+        // one final resize to settle everything
+        window.dispatchEvent(new Event('resize'));
+      },
+      { once: true },
+    );
   },
 
   logoToMenuNavigation() {
@@ -990,7 +1024,10 @@ Polymer({
     this.docId = docParam.uid;
     this.docPath = docParam.path;
     this.$.doc.headers = this._computeHeaders();
-    this.$.doc.enrichers = this._computeEnrichers();
+    const page = (docParam && docParam.page) || 'browse';
+    // compute enrichers for the intended target page
+    this.$.doc.enrichers = this._computeDocumentEnrichersForPage(page);
+
     return this.$.doc.get().then((doc) => {
       if (this.docId && doc.facets.includes('SavedSearch')) {
         this._routedSearch = doc;
@@ -1012,7 +1049,7 @@ Polymer({
   },
 
   load(page, uid, path, action) {
-    this._loadDocument({ uid, path })
+    this._loadDocument({ uid, path, page })
       .then((doc) => {
         if (doc) {
           this.docAction = action;
@@ -1264,7 +1301,6 @@ Polymer({
     drawerMenu.removeAttribute('opened');
     this.selectedTab = '';
   },
-
   _fetchTaskCount() {
     this.$.tasksProvider.fetch().then((response) => {
       this.taskCount = response.resultsCount;
@@ -1580,7 +1616,7 @@ Polymer({
         Performance.markUnique('nuxeo-app.page-changed');
       }
       // add performance listener to current page to track the last dom-change event
-      this.__performanceListener = function() {
+      this.__performanceListener = function () {
         const name = `${el.tagName.toLocaleLowerCase()}.dom-changed`;
         // a measure will be performed from the last page switch or, if this is the first page load,
         // from when navigation started to the current moment
@@ -1762,6 +1798,46 @@ Polymer({
         });
       }
     }
+  },
+
+  _appendEnricher(listOrCsv, value) {
+    const v = (value || '').trim();
+    if (!v) {
+      return listOrCsv;
+    }
+
+    // Array case (your current config.get('enrichers').document is an array)
+    if (Array.isArray(listOrCsv)) {
+      const list = listOrCsv.map((e) => (e ? String(e).trim() : '')).filter(Boolean);
+      if (!list.includes(v)) {
+        list.push(v);
+      }
+      return list;
+    }
+
+    // String case
+    const list = (listOrCsv || '')
+      .split(',')
+      .map((e) => e && e.trim())
+      .filter(Boolean);
+
+    if (!list.includes(v)) {
+      list.push(v);
+    }
+    return list.join(',');
+  },
+
+  _computeDocumentEnrichersForPage(page) {
+    const base = config.get('enrichers') || {};
+
+    // clone so we don't mutate the global config enrichers object
+    const enrichers = { ...base };
+    // preserve existing document/blob enrichers, only append when needed
+    if (page === 'browse') {
+      enrichers.document = this._appendEnricher(enrichers.document, 'userPreferences');
+    }
+
+    return enrichers;
   },
 
   _computeEnrichers() {

@@ -33,7 +33,6 @@ import chromeLauncher from 'chrome-launcher';
 import fetch from 'node-fetch';
 import { fileURLToPath } from 'url';
 import minimist from 'minimist';
-// eslint-disable-next-line import/no-named-default
 const { Launcher: CliLauncher } = await import('@wdio/cli');
 
 const __filename = fileURLToPath(import.meta.url);
@@ -78,8 +77,8 @@ if (argv.watch) {
   args.push('--watch');
 }
 
-if (argv.headless) {
-  process.env.HEADLESS = true;
+if (process.env.HEADLESS === undefined) {
+  process.env.HEADLESS = argv.headless ? 'true' : 'false';
 }
 
 if (argv.tags) {
@@ -109,9 +108,7 @@ if (process.env.DRIVER_VERSION == null) {
   const chromePath = chromeLauncher.Launcher.getFirstInstallation();
   let version;
   try {
-    version = execSync(`"${chromePath}" --version`)
-      .toString()
-      .trim();
+    version = execSync(`"${chromePath}" --version`).toString().trim();
   } catch (e) {
     console.error('unable to get Chrome version: ', e);
   }

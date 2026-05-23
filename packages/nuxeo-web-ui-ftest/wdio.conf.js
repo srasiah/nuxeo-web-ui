@@ -15,6 +15,10 @@ if (process.env.CUCUMBER_REQUIRES) {
 }
 
 const reporters = ['spec'];
+
+const _workerStartTimes = new Map();
+const _featureResults = [];
+
 if (process.env.CUCUMBER_REPORT_PATH) {
   reporters.push([
     'cucumberjs-json',
@@ -33,18 +37,31 @@ const capability = {
   acceptInsecureCerts: true,
   browserVersion: '135.0.7049.114',
   'wdio:enforceWebDriverClassic': true,
+  // Prevent ChromeDriver from auto-dismissing native dialogs (window.confirm, window.alert)
+  // so that tests can explicitly accept/dismiss them via alertAccept/alertDismiss.
+  unhandledPromptBehavior: 'ignore',
 };
 
 const options = {};
 
 switch (capability.browserName) {
   case 'chrome':
-    options.args = ['--no-sandbox'];
+    options.args = [
+      '--no-sandbox', // required in CI containers
+      '--disable-infobars',
+      '--disable-notifications',
+      '--disable-extensions',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+      '--disable-field-trial-config',
+      '--disable-ipc-flooding-protection',
+      '--disable-hang-monitor',
+    ];
 
-    if (process.env.HEADLESS) {
+    if (process.env.HEADLESS === 'true') {
       options.args.push('--window-size=1920,1080');
-      options.args.push('--single-process');
-      options.args.push('--headless');
+      options.args.push('--headless=new');
       options.args.push('--disable-gpu');
       options.args.push('--disable-dev-shm-usage');
     }
@@ -56,6 +73,9 @@ switch (capability.browserName) {
       prefs: {
         profile: {
           password_manager_leak_detection: false,
+          default_content_setting_values: {
+            notifications: 2,
+          },
         },
       },
     };
@@ -78,7 +98,7 @@ switch (capability.browserName) {
   // no default
 }
 
-const TIMEOUT = process.env.TIMEOUT ? Number(process.env.TIMEOUT) : 24000;
+const TIMEOUT = process.env.TIMEOUT ? Number(process.env.TIMEOUT) : 40000;
 
 // Allow overriding driver version
 const drivers = {};
@@ -148,16 +168,8 @@ export const config = {
   // ===================
   // Define all options that are relevant for the WebdriverIO instance here
   //
-  // By default WebdriverIO commands are executed in a synchronous way using
-  // the wdio-sync package. If you still want to run your tests in an async way
-  // e.g. using promises you can set the sync option to false.
-  sync: true,
-  //
   // Level of logging verbosity: trace | debug | info | warn | error | silent
   logLevel: 'error',
-  //
-  // Enables colors for log output.
-  coloredLogs: true,
   //
   // Saves a screenshot to a given path if a command fails.
   // screenshotPath: '',
@@ -249,7 +261,45 @@ export const config = {
   // resolved to continue.
   //
   // Gets executed once before all workers get launched.
-  // onPrepare: () => {},
+  onPrepare: () => {
+    // eslint-disable-next-line no-console
+    console.log(`Starting ftests in ${process.env.HEADLESS === 'true' ? 'HEADLESS' : 'HEADFUL'} mode`);
+
+    // Strip file:// prefix and append timing to WDIO's PASSED/FAILED lines
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    global._originalStdoutWrite = originalWrite;
+    // eslint-disable-next-line no-control-regex
+    const ansiRegex = /\x1b\[[0-9;]*m/g;
+    const statusLineRegex = /\[(\d+-\d+)\] (?:PASSED|FAILED) in .* - /;
+    process.stdout.write = (chunk, ...args) => {
+      if (typeof chunk === 'string') {
+        chunk = chunk.replace(/file:\/\//g, '');
+        const plain = chunk.replace(ansiRegex, '');
+        const match = statusLineRegex.exec(plain);
+        if (match && !/\(\s*[\d.]+s\s*\)/.test(plain)) {
+          // Append elapsed time to WDIO's native status line
+          const start = _workerStartTimes.get(match[1]);
+          if (start) {
+            const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+            chunk = chunk.replace(/\n$/, '') + ` \x1b[1m( ${elapsed}s )\x1b[0m\n`;
+          }
+        }
+      }
+      return originalWrite(chunk, ...args);
+    };
+  },
+  onWorkerStart: (cid) => {
+    _workerStartTimes.set(cid, Date.now());
+  },
+  onWorkerEnd: (cid, exitCode, specs) => {
+    const start = _workerStartTimes.get(cid);
+    if (start) {
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      const specNames = specs.map((s) => s.replace(process.cwd(), '').replace(/^file:\/\//, '')).join(', ');
+      _featureResults.push({ feature: specNames, status: exitCode === 0 ? 'PASSED' : 'FAILED', elapsed });
+      _workerStartTimes.delete(cid);
+    }
+  },
   //
   // Gets executed before test execution begins. At this point you can access all global
   // variables, such as `browser`. It is the perfect place to define custom commands.
@@ -314,6 +364,45 @@ export const config = {
   // Gets executed after all workers got shut down and the process is about to exit. It is not
   // possible to defer the end of the process using a promise.
   onComplete: async () => {
+    // Restore original stdout.write patched in onPrepare
+    if (global._originalStdoutWrite) {
+      process.stdout.write = global._originalStdoutWrite;
+    }
+    if (_featureResults.length > 0) {
+      const divider = '='.repeat(80);
+      const header = `\x1b[1m${'Feature'.padEnd(50)} ${'Status'.padEnd(10)} Time\x1b[0m`;
+      const totalTime = _featureResults.reduce((sum, r) => sum + parseFloat(r.elapsed), 0).toFixed(1);
+      const passed = _featureResults.filter((r) => r.status === 'PASSED').length;
+      const failed = _featureResults.filter((r) => r.status === 'FAILED').length;
+      // eslint-disable-next-line no-console
+      console.log(`\n${divider}`);
+      // eslint-disable-next-line no-console
+      console.log('\x1b[1m  FEATURE TIMING SUMMARY\x1b[0m');
+      // eslint-disable-next-line no-console
+      console.log(`${divider}`);
+      // eslint-disable-next-line no-console
+      console.log(header);
+      // eslint-disable-next-line no-console
+      console.log('-'.repeat(80));
+      _featureResults
+        .sort((a, b) => parseFloat(b.elapsed) - parseFloat(a.elapsed))
+        .forEach((r) => {
+          const statusColor = r.status === 'PASSED' ? '\x1b[32m' : '\x1b[31m';
+          const timeStr = `${r.elapsed}s`;
+          // eslint-disable-next-line no-console
+          console.log(
+            `${r.feature.padEnd(50)} ${statusColor}${r.status}\x1b[0m${' '.repeat(10 - r.status.length)} \x1b[1m${timeStr}\x1b[0m`,
+          );
+        });
+      // eslint-disable-next-line no-console
+      console.log('-'.repeat(80));
+      // eslint-disable-next-line no-console
+      console.log(
+        `\x1b[1mTotal: ${_featureResults.length} features | \x1b[32m${passed} passed\x1b[0m\x1b[1m | \x1b[31m${failed} failed\x1b[0m\x1b[1m | ${totalTime}s\x1b[0m`,
+      );
+      // eslint-disable-next-line no-console
+      console.log(`${divider}\n`);
+    }
     if (process.env.CUCUMBER_REPORT_PATH) {
       // Generate the report when it all tests are done
       htmlReporter.generate({

@@ -4,18 +4,20 @@ on:
   push:
     branches:
       - lts-2025
-
-  # Manually trigger the workflow
   workflow_dispatch:
 
 jobs:
   lint:
-    uses: nuxeo/nuxeo-web-ui/.github/workflows/lint.yaml@lts-2025
+    uses: ./.github/workflows/lint.yaml
+    permissions:
+      contents: read
     secrets:
       NPM_PACKAGES_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
 
   test:
-    uses: nuxeo/nuxeo-web-ui/.github/workflows/test.yaml@lts-2025
+    uses: ./.github/workflows/test.yaml
+    permissions:
+      contents: read
     secrets:
       NPM_PACKAGES_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
       SAUCE_ACCESS_KEY: ${{ secrets.SAUCE_ACCESS_KEY }}
@@ -23,44 +25,76 @@ jobs:
       branch: lts-2025
 
   a11y:
-    uses: nuxeo/nuxeo-web-ui/.github/workflows/a11y.yaml@lts-2025
+    uses: ./.github/workflows/a11y.yaml
+    permissions:
+      contents: read
     secrets:
       NPM_PACKAGES_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
-      PACKAGES_AUTH_USER: ${{ secrets.PACKAGES_AUTH_USER }}
-      PACKAGES_AUTH_TOKEN: ${{ secrets.PACKAGES_AUTH_TOKEN }}
+      REPOSITORY_MANAGER_USERNAME: ${{ secrets.REPOSITORY_MANAGER_USERNAME }}
+      REPOSITORY_MANAGER_PASSWORD: ${{ secrets.REPOSITORY_MANAGER_PASSWORD }}
+    with:
+      branch: lts-2025
+
+  sonar:
+    uses: ./.github/workflows/sonar.yaml
+    permissions:
+      contents: read
+    secrets:
+      NPM_PACKAGES_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     with:
       branch: lts-2025
 
   ftest:
-    uses: nuxeo/nuxeo-web-ui/.github/workflows/ftest.yaml@lts-2025
+    uses: ./.github/workflows/ftest.yaml
+    permissions:
+      contents: read
     secrets:
       NPM_PACKAGES_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
-      PACKAGES_AUTH_USER: ${{ secrets.PACKAGES_AUTH_USER }}
-      PACKAGES_AUTH_TOKEN: ${{ secrets.PACKAGES_AUTH_TOKEN }}
+      REPOSITORY_MANAGER_USERNAME: ${{ secrets.REPOSITORY_MANAGER_USERNAME }}
+      REPOSITORY_MANAGER_PASSWORD: ${{ secrets.REPOSITORY_MANAGER_PASSWORD }}
     with:
       branch: lts-2025
 
   build:
-    needs: [lint, test, a11y, ftest]
-    runs-on: [self-hosted, master]
+    needs: [lint, test, a11y, ftest, sonar]
+    runs-on:
+      group: medium-4cpu-runners
+    permissions:
+      contents: write
+
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
+      - uses: actions/checkout@v6
 
       - run: git config user.name "nuxeo-webui-jx-bot" && git config user.email "webui@hyland.com"
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v6
         with:
           registry-url: 'https://packages.nuxeo.com/repository/npm-public/'
           scope: '@nuxeo'
 
-      - uses: actions/setup-java@v4
+      - name: Cache npm dependencies
+        uses: actions/cache@v5
         with:
-          distribution: 'zulu'
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('package.json', 'packages/nuxeo-web-ui-ftest/package.json', 'packages/nuxeo-designer-catalog/package.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
+
+      - name: Setup Maven build
+        uses: nuxeo/gh-build-tools/.github/actions/setup-maven-build@v0.10.4
+        with:
           java-version: '21'
+
+      - name: Purge cached Nuxeo artifacts
+        run: rm -rf ~/.m2/repository/org/nuxeo
 
       - name: Prepare environment
         run: |
-          echo "BRANCH_NAME=${GITHUB_HEAD_REF##*/}" >> $GITHUB_ENV
           echo "PACKAGE_VERSION=$(npx -c 'echo "$npm_package_version"')" >> $GITHUB_ENV
 
       - name: Get prerelease version
@@ -71,7 +105,7 @@ jobs:
 
       - name: Update versions
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
         run: |
           find . -type f -not -path "./node_modules/*" -regex ".*\.\(yaml\|sample\|xml\)" -exec sed -i 's/'"$PACKAGE_VERSION"'/'"$VERSION"'/g' {} \;
 
@@ -85,7 +119,9 @@ jobs:
 
           # Get latest UI Elements version
           ELEMENTS_VERSION=$(npm view @nuxeo/nuxeo-ui-elements versions --json | jq -r '.[]' | grep -E "2025\.[0-9]+\.[0-9]+-rc\.[0-9]+$" | sort -V | tail -n1)
+
           echo "Latest nuxeo-elements version: $ELEMENTS_VERSION"
+
           # Update package.json dependencies and devDependencies
           jq --arg ver "~$ELEMENTS_VERSION" '
             .dependencies."@nuxeo/nuxeo-dataviz-elements" = $ver |
@@ -95,42 +131,32 @@ jobs:
           ' package.json > tmp.json && mv tmp.json package.json
           echo "Updated all Nuxeo dependencies to version $ELEMENTS_VERSION"
 
+          # Sync lockfile after manual package.json edits
+          npm install --package-lock-only --ignore-scripts
+
           pushd packages/nuxeo-web-ui-ftest
           npm version ${VERSION} --no-git-tag-version
           popd
 
       - name: Install
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
         run: |
-          npm install
-          pushd packages/nuxeo-web-ui-ftest
-          npm install
-          popd
-          pushd packages/nuxeo-designer-catalog
-          npm install
-          popd
+          npm ci --ignore-scripts
+          (cd packages/nuxeo-web-ui-ftest && npm ci)
+          (cd packages/nuxeo-designer-catalog && npm ci)
 
-      - name: 'Update settings.xml with server configuration'
-        run: |
-          echo '<settings>
-              <servers>
-                <server>
-                  <id>maven-internal</id>
-                  <username>${{ secrets.PACKAGES_AUTH_USER }}</username>
-                  <password>${{ secrets.PACKAGES_AUTH_TOKEN }}</password>
-                </server>
-              </servers>
-              </settings>' > ~/.m2/settings.xml
-
-      - name: Nuxeo package build
+      - name: Build packages
+        env:
+          MVN_REPO_USERNAME: ${{ secrets.REPOSITORY_MANAGER_USERNAME }}
+          MVN_REPO_PASSWORD: ${{ secrets.REPOSITORY_MANAGER_PASSWORD }}
         run: |
           mvn -ntp install -DskipInstall
           mvn -B -nsu -ntp -f plugin/itests/addon install
           mvn -B -nsu -ntp -f plugin/itests/marketplace install
 
       - name: Archive packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: packages
           path: |
@@ -149,19 +175,13 @@ jobs:
           CONNECT_PREPROD_URL: https://nos-preprod-connect.nuxeocloud.com/nuxeo
         run: |
           PACKAGE="plugin/web-ui/marketplace/target/nuxeo-web-ui-marketplace-${PADDED_VERSION}.zip"
-          STATUS_CODE=`curl -i --silent --output publish-req.output -w "%{http_code}" -u "${{ secrets.CONNECT_PREPROD_AUTH }}" -F package=@$PACKAGE "$CONNECT_PREPROD_URL/site/marketplace/upload?batch=true"`
-          cat publish-req.output
-          if [[ "$STATUS_CODE" != "200" ]]
-          then
-            exit 1
-          else
-            exit 0
-          fi
+          curl -fS -u "${{ secrets.CONNECT_PREPROD_AUTH }}" \
+               -F package=@$PACKAGE \
+               "$CONNECT_PREPROD_URL/site/marketplace/upload?batch=true"
 
       - name: Publish Web UI FTest framework
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
         run: |
-          pushd packages/nuxeo-web-ui-ftest/
+          cd packages/nuxeo-web-ui-ftest
           npm publish --@nuxeo:registry=https://packages.nuxeo.com/repository/npm-public/ --tag SNAPSHOT
-          popd

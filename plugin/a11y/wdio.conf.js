@@ -1,4 +1,3 @@
-import { execSync } from 'child_process';
 import CompatService from '@nuxeo/nuxeo-web-ui-ftest/wdio-compat-plugin.js';
 import ShadowService from '@nuxeo/nuxeo-web-ui-ftest/wdio-shadow-plugin.js';
 
@@ -26,36 +25,24 @@ const capability = {
   maxInstances: 1,
   browserName: 'chrome',
   acceptInsecureCerts: true,
-  browserVersion: '135.0.7049.114',
+  browserVersion: 'stable',
 };
 const options = {
-  args: ['--no-sandbox'],
+  args: [
+    '--no-sandbox',
+    '--disable-background-networking',
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
+  ],
 };
 if (process.env.HEADLESS) {
   options.args.push('--window-size=1920,1080');
-  options.args.push('--single-process');
-  options.args.push('--headless');
+  options.args.push('--headless=new');
   options.args.push('--disable-gpu');
   options.args.push('--disable-dev-shm-usage');
 }
 capability['goog:chromeOptions'] = options;
-
-// Allow overriding driver version
-if (!process.env.DRIVER_VERSION) {
-  try {
-    process.env.DRIVER_VERSION = execSync('node getDriverVersion.js')
-      .toString()
-      .trim();
-  } catch (e) {
-    console.error('unable to get Chrome version: ', e);
-  }
-}
-const drivers = {
-  chrome: {},
-};
-if (process.env.DRIVER_VERSION) {
-  drivers.chrome.version = process.env.DRIVER_VERSION;
-}
 
 export const config = {
   execArgv: debug ? ['--inspect'] : [],
@@ -97,7 +84,7 @@ export const config = {
   // and 30 processes will get spawned. The property handles how many capabilities
   // from the same test should run tests.
   //
-  maxInstances: 10,
+  maxInstances: 1,
   //
   // If you have trouble getting all important capabilities together, check out the
   // Sauce Labs platform configurator - a great tool to configure your capabilities:
@@ -111,11 +98,13 @@ export const config = {
   // Define all options that are relevant for the WebdriverIO instance here
   //
   // Level of logging verbosity: trace | debug | info | warn | error | silent
-  logLevel: 'info',
+  logLevel: 'warn',
   //
   // Set specific log levels per logger
-  // loggers:
-  // - webdriver, webdriverio
+  logLevels: {
+    'webdriverio:ShadowRootManager': 'silent',
+  },
+  //
   // - @wdio/applitools-service, @wdio/browserstack-service, @wdio/devtools-service, @wdio/sauce-service
   // - @wdio/mocha-framework, @wdio/jasmine-framework
   // - @wdio/local-runner
@@ -226,7 +215,9 @@ export const config = {
    */
   before() {
     // XXX not doing this affects the count for 'color-contrast' violations locally
-    browser.maximizeWindow();
+    if (!process.env.HEADLESS) {
+      browser.maximizeWindow();
+    }
   },
   /**
    * Runs before a WebdriverIO command gets executed.

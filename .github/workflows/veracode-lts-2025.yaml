@@ -3,7 +3,8 @@
 # separate terms of service, privacy policy, and support
 # documentation.
 
-# This workflow will initiate a Veracode Static Analysis Pipeline scan, return a results.json and convert to SARIF for upload as a code scanning alert
+# This workflow will initiate a Veracode Static Analysis Pipeline scan, return a
+# results.json and convert to SARIF for upload as a code scanning alert
 
 name: Veracode LTS-2025
 
@@ -16,35 +17,38 @@ env:
   NPM_REPOSITORY: https://packages.nuxeo.com/repository/npm-public/
   BRANCH_NAME: ${{'lts-2025' }}
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
-permissions:
-  contents: read
-
+# A workflow run is made up of one or more jobs that can run sequentially or in
+# parallel
 jobs:
-  # This workflow contains a job to build and submit pipeline scan, you will need to customize the build process accordingly and make sure the artifact you build is used as the file input to the pipeline scan file parameter
+  # This workflow contains a job to build and submit pipeline scan, you will
+  # need to customize the build process accordingly and make sure the artifact
+  # you build is used as the file input to the pipeline scan file parameter
   sast-scan-build:
     # The type of runner that the job will run on
     permissions:
       contents: read # for actions/checkout to fetch code
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
       actions: read # only required for a private repository by github/codeql-action/upload-sarif to get the Action run status
-    runs-on: [self-hosted, master]
+    # The type of runner that the job will run on
+    runs-on:
+      group: medium-4cpu-runners
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it and copies all sources into ZIP file for submitting for analysis. Replace this section with your applications build steps
-      - uses: actions/checkout@v2
+      - uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can
+      # access it and copies all sources into ZIP file for submitting for
+      # analysis. Replace this section with your applications build steps
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.BRANCH_NAME }}
 
-      - uses: actions/setup-node@v1
+      - uses: actions/setup-node@v6
         with:
           registry-url: ${{ env.NPM_REPOSITORY }}
+          always-auth: true
           node-version: 18
           scope: '@nuxeo'
-
-      - uses: actions/setup-java@v2
-        with:
-          distribution: 'zulu'
-          java-version: '11'
 
       - name: Determine nuxeo-elements branch to link
         id: pick_nuxeo_elements_branch
@@ -58,12 +62,13 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
         run: |
-          npm install
+          npm ci --ignore-scripts
           pushd packages/nuxeo-web-ui-ftest
-          npm install
+          npm ci
           popd
+
       - name: Checkout the nuxeo-elements repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
         with:
           repository: nuxeo/nuxeo-elements
           path: nuxeo-elements
@@ -87,35 +92,14 @@ jobs:
           popd
           popd
 
-      - name: add .npmrc
-        run: |
-          pushd /tmp/_temp/
-          rm .npmrc
-          touch .npmrc
-          popd
-          echo '
-            packages.nuxeo.com/repository/npm-public/:_auth=${NODE_AUTH_TOKEN}
-            @nuxeo:registry=https://packages.nuxeo.com/repository/npm-public/
-            always-auth=true
-          ' >> /tmp/_temp/.npmrc
-
       - name: Link elements to Web UI
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PACKAGES_TOKEN }}
         run: |
           npm install --no-package-lock --@nuxeo:registry="${{ env.NPM_REPOSITORY }}" nuxeo-elements/core/${ELEMENTS_CORE}
           npm install --no-package-lock --@nuxeo:registry="${{ env.NPM_REPOSITORY }}" nuxeo-elements/ui/${ELEMENTS_UI}
           npm install --no-package-lock --@nuxeo:registry="${{ env.NPM_REPOSITORY }}" nuxeo-elements/dataviz/${ELEMENTS_DATAVIZ}
           npm install --no-package-lock --@nuxeo:registry="${{ env.NPM_REPOSITORY }}" nuxeo-elements/testing-helpers/${ELEMENTS_HELPERS}
-      - name: 'Update settings.xml with server configuration'
-        run: |
-          echo '<settings>
-              <servers>
-                <server>
-                  <id>maven-internal</id>
-                  <username>${{ secrets.PACKAGES_AUTH_USER }}</username>
-                  <password>${{ secrets.PACKAGES_AUTH_TOKEN }}</password>
-                </server>
-              </servers>
-              </settings>' > ~/.m2/settings.xml
 
       - name: Delete Node Modules
         run: |
@@ -136,7 +120,9 @@ jobs:
           rm -rf packages/nuxeo-web-ui-ftest/
 
       - name: Install zip
-        run: apt-get install zip
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends zip
 
       - name: Zip nuxeo-web-ui
         run: |
@@ -144,7 +130,7 @@ jobs:
           zip -r nuxeo-web-ui.zip *
 
       - name: Upload ZIP as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nuxeo-web-ui
           path: nuxeo-web-ui.zip
@@ -158,7 +144,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: nuxeo-web-ui
           path: .
@@ -169,7 +155,7 @@ jobs:
           pwd
 
       - name: Veracode Upload And Scan
-        uses: veracode/veracode-uploadandscan-action@0.2.6
+        uses: veracode/veracode-uploadandscan-action@0.2.11
         with:
           version: 'Nuxeo WebUI - LTS2025 - ${{ github.run_id }}'
           appname: 'Nuxeo Web UI'

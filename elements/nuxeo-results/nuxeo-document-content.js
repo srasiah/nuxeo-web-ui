@@ -144,6 +144,8 @@ Polymer({
         empty-label="[[emptyLabel]]"
         empty-label-when-filtered="[[emptyLabelWhenFiltered]]"
         selection-enabled
+        column-resize-enabled
+        column-reorder-enabled
         on-row-clicked="_navigate"
         draggable$="[[_hasWritePermission(document)]]"
         drop-target-filter="[[_dropTargetFilter]]"
@@ -219,9 +221,7 @@ Polymer({
           field="versionLabel"
           hidden
         >
-          <template>
-            [[formatVersion(item)]]
-          </template>
+          <template> [[formatVersion(item)]] </template>
         </nuxeo-data-table-column>
         <nuxeo-data-table-column
           name="[[i18n('documentContentView.datatable.header.created')]]"
@@ -293,9 +293,7 @@ Polymer({
             </template>
             <template is="dom-if" if="[[isFavorite(item)]]">
               <iron-icon id="favorite" icon="nuxeo:favorites"></iron-icon>
-              <nuxeo-tooltip for="favorite">
-                [[i18n('documentContentView.datatable.flags.favorite')]]
-              </nuxeo-tooltip>
+              <nuxeo-tooltip for="favorite"> [[i18n('documentContentView.datatable.flags.favorite')]] </nuxeo-tooltip>
             </template>
             <template is="dom-if" if="[[_contentStoredInColdStorage(item)]]">
               <iron-icon id="coldStorage" icon="nuxeo:coldstorage"></iron-icon>
