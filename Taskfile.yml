@@ -70,6 +70,15 @@ vars:
       v=$(grep -m1 '^MAVEN_OPTS=' .env 2>/dev/null | cut -d= -f2-)
       echo "${MAVEN_OPTS:-${v:--Xmx2g -Xms512m}}"
 
+  NUXEO_PLUGIN_WEBUI_FILE_PATH:
+    sh: |
+      v=$(grep -m1 '^NUXEO_PLUGIN_WEBUI_FILE_PATH=' .env 2>/dev/null | cut -d= -f2-)
+      echo "${NUXEO_PLUGIN_WEBUI_FILE_PATH:-${v:-./plugin/web-ui/marketplace/target/*.zip}}"
+  NUXEO_BENCHMARK_MARKETPLACE_PATH:
+    sh: |
+      v=$(grep -m1 '^NUXEO_BENCHMARK_MARKETPLACE_PATH=' .env 2>/dev/null | cut -d= -f2-)
+      echo "${NUXEO_BENCHMARK_MARKETPLACE_PATH:-${v:-~/your-projects/nuxeo/docker/nuxeo-benchmark/marketplace/}}"
+
   NODE_VERSION:
     sh: node --version 2>/dev/null || echo "not installed"
   NPM_VERSION:
@@ -274,6 +283,15 @@ tasks:
       - echo "Building marketplace package (skipping tests)..."
       - "{{.MVN}} clean install -DskipTests"
       - echo "Marketplace package built"
+
+  # ── Deploy ───────────────────────────────────────────────────────────────────
+
+  copy-to-benchmark:
+    desc: Copy marketplace zip to local nuxeo-benchmark marketplace directory
+    cmds:
+      - echo "Copying marketplace package to benchmark..."
+      - cp {{.NUXEO_PLUGIN_WEBUI_FILE_PATH}} {{.NUXEO_BENCHMARK_MARKETPLACE_PATH}}
+      - echo "Marketplace package copied to {{.NUXEO_BENCHMARK_MARKETPLACE_PATH}}"
 
   # ── Docker ───────────────────────────────────────────────────────────────────
 
