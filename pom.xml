@@ -43,6 +43,16 @@
         <module>plugin/a11y</module>
       </modules>
     </profile>
+    <!-- Used to deploy -->
+    <profile>
+      <id>deploy</id>
+      <distributionManagement>
+        <repository>
+          <id>${DISTRIBUTION_ID}</id>
+          <url>${DISTRIBUTION_URL}</url>
+        </repository>
+      </distributionManagement>
+    </profile>
   </profiles>
 
   <dependencyManagement>
