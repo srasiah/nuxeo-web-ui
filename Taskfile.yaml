@@ -48,6 +48,11 @@ vars:
   NUXEO_BENCHMARK_MARKETPLACE_PATH:
     sh: scripts/task/env-default.sh NUXEO_BENCHMARK_MARKETPLACE_PATH "~/your-projects/nuxeo/docker/nuxeo-benchmark/marketplace/"
 
+  DISTRIBUTION_ID:
+    sh: scripts/task/env-default.sh DISTRIBUTION_ID
+  DISTRIBUTION_URL:
+    sh: scripts/task/env-default.sh DISTRIBUTION_URL
+
   NODE_VERSION:
     sh: node --version 2>/dev/null || echo "not installed"
   NPM_VERSION:
@@ -229,6 +234,16 @@ tasks:
     cmds:
       - task: mp-build-skip
       - task: copy-to-benchmark
+
+  deploy:
+    desc: Deploy Maven artifacts to the configured distribution repository (DISTRIBUTION_ID/DISTRIBUTION_URL)
+    preconditions:
+      - sh: '[ -n "{{.DISTRIBUTION_ID}}" ]'
+        msg: "Error: DISTRIBUTION_ID is not set (set it in .env or pass DISTRIBUTION_ID=... on the CLI)"
+      - sh: '[ -n "{{.DISTRIBUTION_URL}}" ]'
+        msg: "Error: DISTRIBUTION_URL is not set (set it in .env or pass DISTRIBUTION_URL=... on the CLI)"
+    cmds:
+      - "{{.MVN}} clean deploy -Pdeploy -DDISTRIBUTION_ID={{.DISTRIBUTION_ID}} -DDISTRIBUTION_URL={{.DISTRIBUTION_URL}}"
 
   # ── Docker ───────────────────────────────────────────────────────────────────
 
