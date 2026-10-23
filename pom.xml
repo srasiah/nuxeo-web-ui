@@ -3,7 +3,7 @@
   <parent>
     <groupId>org.nuxeo</groupId>
     <artifactId>nuxeo-parent</artifactId>
-    <version>2025.21-SNAPSHOT</version>
+    <version>2025.22-SNAPSHOT</version>
   </parent>
 
   <groupId>org.nuxeo.web.ui</groupId>
@@ -43,14 +43,20 @@
         <module>plugin/a11y</module>
       </modules>
     </profile>
-    <!-- Used to deploy -->
+    <!-- Used to deploy: mvn deploy -Pdeploy -Ddistribution.id=… -Ddistribution.url=… -Ddistribution.snapshots.url=…
+         (task deploy: DISTRIBUTION_* in .env); no default repository, and the id names the <server> holding the
+         credentials -->
     <profile>
       <id>deploy</id>
       <distributionManagement>
         <repository>
-          <id>${DISTRIBUTION_ID}</id>
-          <url>${DISTRIBUTION_URL}</url>
+          <id>${distribution.id}</id>
+          <url>${distribution.url}</url>
         </repository>
+        <snapshotRepository>
+          <id>${distribution.id}</id>
+          <url>${distribution.snapshots.url}</url>
+        </snapshotRepository>
       </distributionManagement>
     </profile>
   </profiles>
@@ -94,6 +100,7 @@
         <enabled>true</enabled>
       </snapshots>
     </repository>
+    <!-- Nuxeo's internal repository needs Nuxeo credentials and supplies nothing here (401 on every lookup):
     <repository>
       <id>maven-internal</id>
       <url>https://packages.nuxeo.com/repository/maven-internal/</url>
@@ -105,8 +112,10 @@
         <enabled>true</enabled>
       </snapshots>
     </repository>
+    -->
   </repositories>
 
+  <!-- Nuxeo's internal repository, as above:
   <pluginRepositories>
     <pluginRepository>
       <id>maven-internal</id>
@@ -120,6 +129,7 @@
       </snapshots>
     </pluginRepository>
   </pluginRepositories>
+  -->
 
   <scm>
     <connection>scm:git:git://github.com/nuxeo/plugin-nuxeo-web-ui.git</connection>
