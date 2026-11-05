@@ -1,0 +1,96 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+# Maven builds and tests (task mvn:<name>). This file is the same in every Java project: keep it byte-identical, and
+# put what differs in .env.mvn (tracked project defaults) or .env (local, git-ignored, wins). Uses the root's MVN var.
+#
+#   MVN_ARGS            extra Maven flags (read by the root's MVN var)
+#   MVN_BUILD_GOAL      final build goal (default: install)
+#   MVN_MODULE_PREFIX   lets MODULE be a short name: core means <prefix>core when that folder exists
+#   MVN_PL_PREFIX       prefix for -pl, e.g. : when MODULE is an artifactId
+#   MVN_TEST_ALSO_MAKE  true: mvn:test and mvn:it with MODULE also build what it needs (-am)
+#   MVN_IT_ARGS         goals and flags of mvn:it
+#   MVN_IT_TEST         test pattern of mvn:it, unless TEST is given
+#   MVN_FTEST_PROFILE   Maven profile of mvn:build-ftest
+#   MVN_PACKAGE_ZIP     glob of the marketplace package, for mvn:package-contents
+#
+# The logic runs in shell inside cmds: dotenv values are not visible to sh: blocks under vars:.
+version: '3'
+
+vars:
+  # Expects m=<MODULE>; sets pl (the -pl value) and am (-am when MVN_TEST_ALSO_MAKE is true)
+  SET_PL: >-
+    pl=""; am="";
+    if [ -n "$m" ]; then
+    if [ -d "${MVN_MODULE_PREFIX:-}$m" ]; then m="${MVN_MODULE_PREFIX:-}$m"; fi;
+    pl="${MVN_PL_PREFIX:-}$m";
+    fi;
+    if [ "${MVN_TEST_ALSO_MAKE:-}" = true ]; then am="-am"; fi
+
+tasks:
+  build:
+    desc: 'Clean build with tests: all modules, or one and what it needs (MODULE=x)'
+    cmds:
+      - |
+        m='{{.MODULE}}'; {{.SET_PL}}
+        {{.MVN}} clean "${MVN_BUILD_GOAL:-install}" ${pl:+-pl "$pl" -am}
+
+  build-skip-tests:
+    aliases: [quick]
+    desc: 'Clean build without tests: all modules, or one and what it needs (MODULE=x)'
+    cmds:
+      - |
+        m='{{.MODULE}}'; {{.SET_PL}}
+        {{.MVN}} clean "${MVN_BUILD_GOAL:-install}" -DskipTests ${pl:+-pl "$pl" -am}
+
+  build-ftest:
+    desc: Clean build with functional tests (where the project sets MVN_FTEST_PROFILE)
+    preconditions:
+      - sh: '[ -n "${MVN_FTEST_PROFILE:-}" ]'
+        msg: "MVN_FTEST_PROFILE is not set for this project"
+    cmds:
+      - '{{.MVN}} clean "${MVN_BUILD_GOAL:-install}" "-P$MVN_FTEST_PROFILE"'
+
+  test:
+    desc: 'Run the tests: all, one module (MODULE=x), or one class or method (TEST=Class#method)'
+    cmds:
+      - |
+        m='{{.MODULE}}'; {{.SET_PL}}
+        {{.MVN}} test ${pl:+-pl "$pl" $am}{{if .TEST}} -Dtest='{{.TEST}}' -Dsurefire.failIfNoSpecifiedTests=false{{end}}
+
+  it:
+    desc: 'Integration tests (where the project sets MVN_IT_ARGS); optional MODULE=x, TEST=pattern'
+    preconditions:
+      - sh: '[ -n "${MVN_IT_ARGS:-}" ]'
+        msg: "MVN_IT_ARGS is not set for this project"
+    cmds:
+      - |
+        m='{{.MODULE}}'; {{.SET_PL}}
+        t='{{.TEST}}'; t="${t:-${MVN_IT_TEST:-}}"
+        {{.MVN}} $MVN_IT_ARGS ${pl:+-pl "$pl" $am} ${t:+"-Dtest=$t" -Dsurefire.failIfNoSpecifiedTests=false}
+
+  deps:
+    desc: 'Dependency tree of one module (MODULE=x), written to target/dependency-tree.txt and shown'
+    preconditions:
+      - sh: '[ -n "{{.MODULE}}" ]'
+        msg: "Name the module: task mvn:deps MODULE=x"
+    cmds:
+      - |
+        m='{{.MODULE}}'; {{.SET_PL}}
+        {{.MVN}} -q dependency:tree -pl "$pl" "-DoutputFile=$PWD/target/dependency-tree.txt"
+      - cat target/dependency-tree.txt
+
+  package-contents:
+    aliases: [pkg]
+    desc: List what the built marketplace package holds (where the project sets MVN_PACKAGE_ZIP)
+    silent: true
+    preconditions:
+      - sh: '[ -n "${MVN_PACKAGE_ZIP:-}" ]'
+        msg: "MVN_PACKAGE_ZIP is not set for this project"
+      - sh: ls $MVN_PACKAGE_ZIP >/dev/null 2>&1
+        msg: "No package built yet: task mvn:quick first"
+    cmds:
+      - unzip -l $MVN_PACKAGE_ZIP
+
+  clean:
+    desc: Clean all Maven build artifacts
+    cmds:
+      - '{{.MVN}} clean'

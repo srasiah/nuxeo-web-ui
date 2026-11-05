@@ -1,7 +1,11 @@
 # yaml-language-server: $schema=https://taskfile.dev/schema.json
 version: '3'
 
-dotenv: ['.env.sample', '.env']
+dotenv: ['.env.sample', '.env', '.env.mvn']
+
+includes:
+  # mvn:*  Maven builds and tests (task mvn:build, mvn:quick, mvn:test, ...)
+  mvn: ./taskfiles/mvn.yml
 
 vars:
   # Precedence for every env-backed var below: shell/CLI env > .env file > default.
@@ -25,7 +29,7 @@ vars:
   MAVEN_VERSION:
     sh: scripts/task/env-default.sh MAVEN_VERSION current
   MAVEN_HOME: "{{.HOME}}/.sdkman/candidates/maven/{{.MAVEN_VERSION}}"
-  MVN: "{{.MAVEN_HOME}}/bin/mvn"
+  MVN: "{{.MAVEN_HOME}}/bin/mvn ${MVN_ARGS:-}"
   MAVEN_OPTS:
     sh: scripts/task/env-default.sh MAVEN_OPTS "-Xmx2g -Xms512m"
 
@@ -201,28 +205,6 @@ tasks:
     cmds:
       - rm -rf .tmp/
 
-  # ── Maven ────────────────────────────────────────────────────────────────────
-
-  mp-clean:
-    desc: Clean Maven build
-    cmds:
-      - "{{.MVN}} clean"
-
-  mp-build:
-    desc: Build marketplace package with Maven
-    cmds:
-      - "{{.MVN}} clean install"
-
-  mp-build-ftest:
-    desc: Build marketplace package with functional tests
-    cmds:
-      - "{{.MVN}} clean install -Pftest"
-
-  mp-build-skip:
-    desc: Build marketplace package (skip tests)
-    cmds:
-      - "{{.MVN}} clean install -DskipTests"
-
   # ── Deploy ───────────────────────────────────────────────────────────────────
 
   copy-to-benchmark:
@@ -234,7 +216,7 @@ tasks:
   deploy-plugin:
     desc: Build marketplace package (skip tests) and copy it to the benchmark marketplace directory
     cmds:
-      - task: mp-build-skip
+      - task: mvn:build-skip-tests
       - task: copy-to-benchmark
 
   deploy:
@@ -305,7 +287,7 @@ tasks:
     cmds:
       - task: install
       - task: build
-      - task: mp-build
+      - task: mvn:build
 
   dev:
     desc: Install dependencies and start development server
