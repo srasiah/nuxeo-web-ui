@@ -90,6 +90,13 @@ tasks:
     cmds:
       - unzip -l $MVN_PACKAGE_ZIP
 
+  release:
+    desc: 'Tag a release and bump to the next SNAPSHOT, pushing both (flags go after --: task mvn:release -- -DdryRun=true)'
+    cmds:
+      # A failed prepare stops here and keeps release.properties, so re-running resumes it
+      - '{{.MVN}} release:prepare {{.CLI_ARGS}}'
+      - '{{.MVN}} release:clean'
+
   clean:
     desc: Clean all Maven build artifacts
     cmds:
