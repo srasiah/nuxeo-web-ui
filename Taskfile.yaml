@@ -36,12 +36,11 @@ vars:
   # sdkman Maven when installed, else whatever mvn is on PATH.
   MVN_BIN:
     sh: '[ -x "{{.MAVEN_HOME}}/bin/mvn" ] && echo "{{.MAVEN_HOME}}/bin/mvn" || echo mvn'
-  MVN: "{{.MVN_BIN}} ${MVN_ARGS:-}"
   MAVEN_OPTS:
     sh: scripts/task/env-default.sh MAVEN_OPTS "-Xmx2g -Xms512m"
 
   JAVA_VERSION:
-    sh: scripts/task/env-default.sh JAVA_VERSION current
+    sh: scripts/task/env-default.sh JAVA_VERSION
   # Precedence: JAVA_VERSION (.env / CLI) > inherited JAVA_HOME > sdkman current.
   JAVA_HOME:
     sh: |
@@ -53,6 +52,8 @@ vars:
       else
         echo "$HOME/.sdkman/candidates/java/current"
       fi
+  # Set on the command: an env: block loses to a JAVA_HOME already in the shell, and SDKMAN always sets one
+  MVN: "JAVA_HOME={{.JAVA_HOME}} {{.MVN_BIN}} ${MVN_ARGS:-}"
 
   NUXEO_PLUGIN_WEBUI_FILE_PATH:
     sh: scripts/task/env-default.sh NUXEO_PLUGIN_WEBUI_FILE_PATH "./plugin/web-ui/marketplace/target/*.zip"
