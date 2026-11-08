@@ -15,6 +15,8 @@ vars:
     sh: scripts/task/env-default.sh NUXEO_WEB_UI_VERSION "$(node -p "require('./package.json').version" 2>/dev/null || echo unknown)"
   NUXEO_VERSION:
     sh: scripts/task/env-default.sh NUXEO_VERSION master
+  NUXEO_IMAGE:
+    sh: scripts/task/env-default.sh NUXEO_IMAGE nuxeo/nuxeo
   NUXEO_PACKAGES:
     sh: scripts/task/env-default.sh NUXEO_PACKAGES "nuxeo-drive nuxeo-liveconnect nuxeo-template-rendering"
   NUXEO_DEV_MODE:
@@ -24,12 +26,17 @@ vars:
     sh: git rev-parse HEAD 2>/dev/null || echo "local"
 
   NPM: npm
-  DOCKER_COMPOSE: docker-compose
+  # Compose command for the docker-* tasks; override with COMPOSE=... (e.g. "podman-compose").
+  COMPOSE:
+    sh: scripts/task/env-default.sh COMPOSE "podman compose"
 
   MAVEN_VERSION:
     sh: scripts/task/env-default.sh MAVEN_VERSION current
   MAVEN_HOME: "{{.HOME}}/.sdkman/candidates/maven/{{.MAVEN_VERSION}}"
-  MVN: "{{.MAVEN_HOME}}/bin/mvn ${MVN_ARGS:-}"
+  # sdkman Maven when installed, else whatever mvn is on PATH.
+  MVN_BIN:
+    sh: '[ -x "{{.MAVEN_HOME}}/bin/mvn" ] && echo "{{.MAVEN_HOME}}/bin/mvn" || echo mvn'
+  MVN: "{{.MVN_BIN}} ${MVN_ARGS:-}"
   MAVEN_OPTS:
     sh: scripts/task/env-default.sh MAVEN_OPTS "-Xmx2g -Xms512m"
 
@@ -65,8 +72,8 @@ vars:
     sh: npm --version 2>/dev/null || echo "not installed"
   MVN_VERSION:
     sh: '{{.MVN}} --version 2>/dev/null | head -1 || echo "not installed"'
-  DC_VERSION:
-    sh: docker-compose --version 2>/dev/null || echo "not installed"
+  COMPOSE_VERSION:
+    sh: 'v=$({{.COMPOSE}} version 2>/dev/null | tail -1 | sed "s/\x1b\[[0-9;]*m//g"); echo "${v:-not installed}"'
 
 env:
   JAVA_HOME: "{{.JAVA_HOME}}"
@@ -236,42 +243,57 @@ tasks:
         -Ddistribution.url={{.DISTRIBUTION_URL}}
         -Ddistribution.snapshots.url={{.DISTRIBUTION_SNAPSHOTS_URL}}
 
-  # ── Docker ───────────────────────────────────────────────────────────────────
+  # ── Containers (Podman by default; set COMPOSE to change) ──────────────────
+
+  compose-check:
+    internal: true
+    preconditions:
+      - sh: '{{.COMPOSE}} version >/dev/null 2>&1'
+        msg: >-
+          "{{.COMPOSE}}" does not work. podman compose needs a provider: install podman-compose
+          (e.g. pip install --user podman-compose), or set COMPOSE in .env.
 
   docker-build:
-    desc: Build Docker image
+    desc: Build the Web UI image with compose
+    deps: [compose-check]
     cmds:
-      - "{{.DOCKER_COMPOSE}} build"
+      - "{{.COMPOSE}} build"
 
   docker-up:
-    desc: Start Docker Compose services
+    desc: Start compose services
+    deps: [compose-check]
     cmds:
-      - "{{.DOCKER_COMPOSE}} up"
+      - "{{.COMPOSE}} up"
 
   docker-up-build:
-    desc: Build and start Docker Compose services
+    desc: Build and start compose services
+    deps: [compose-check]
     cmds:
-      - "{{.DOCKER_COMPOSE}} up --build"
+      - "{{.COMPOSE}} up --build"
 
   docker-up-detached:
-    desc: Start Docker Compose services in detached mode
+    desc: Start compose services in detached mode
+    deps: [compose-check]
     cmds:
-      - "{{.DOCKER_COMPOSE}} up -d"
+      - "{{.COMPOSE}} up -d"
 
   docker-down:
-    desc: Stop Docker Compose services
+    desc: Stop compose services
+    deps: [compose-check]
     cmds:
-      - "{{.DOCKER_COMPOSE}} down"
+      - "{{.COMPOSE}} down"
 
   docker-logs:
-    desc: Show Docker Compose logs
+    desc: Follow compose service logs
+    deps: [compose-check]
     cmds:
-      - "{{.DOCKER_COMPOSE}} logs -f"
+      - "{{.COMPOSE}} logs -f"
 
   docker-clean:
-    desc: Remove Docker containers, volumes, and images
+    desc: Remove compose containers, volumes, and images
+    deps: [compose-check]
     cmds:
-      - "{{.DOCKER_COMPOSE}} down -v --rmi all"
+      - "{{.COMPOSE}} down -v --rmi all"
 
   # ── Combined ─────────────────────────────────────────────────────────────────
 
@@ -314,14 +336,15 @@ tasks:
       - printf '%-30s %s\n' "Version:" "{{.NUXEO_WEB_UI_VERSION}}"
       - printf '%-30s %s\n' "SCM Ref:" "{{.SCM_REF}}"
       - printf '%-30s %s\n' "Nuxeo Version:" "{{.NUXEO_VERSION}}"
+      - printf '%-30s %s\n' "Nuxeo Image:" "{{.NUXEO_IMAGE}}:{{.NUXEO_VERSION}}"
       - printf '%-30s %s\n' "Nuxeo Packages:" "{{.NUXEO_PACKAGES}}"
       - printf '%-30s %s\n' "Dev Mode:" "{{.NUXEO_DEV_MODE}}"
       - echo ""
       - printf '%-30s %s\n' "Node.js:" "{{.NODE_VERSION}}"
       - printf '%-30s %s\n' "NPM:" "{{.NPM_VERSION}}"
       - printf '%-30s %s\n' "Maven:" "{{.MVN_VERSION}}"
-      - printf '%-30s %s\n' "MAVEN_HOME:" "{{.MAVEN_HOME}}"
-      - printf '%-30s %s\n' "Docker Compose:" "{{.DC_VERSION}}"
+      - printf '%-30s %s\n' "Maven binary:" "{{.MVN_BIN}}"
+      - printf '%-30s %s\n' "Compose:" "{{.COMPOSE}} ({{.COMPOSE_VERSION}})"
       - printf '%-30s %s\n' "JAVA_VERSION:" "{{.JAVA_VERSION}}"
       - printf '%-30s %s\n' "JAVA_HOME:" "{{.JAVA_HOME}}"
       - printf '%-30s %s\n' "MAVEN_OPTS:" "{{.MAVEN_OPTS}}"

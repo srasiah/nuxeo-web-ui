@@ -16,7 +16,7 @@ services:
       context: .
     
   nuxeo:
-    image: nuxeo/nuxeo:${NUXEO_VERSION}
+    image: ${NUXEO_IMAGE:-nuxeo/nuxeo}:${NUXEO_VERSION}
     environment:
       - NUXEO_DEV_MODE
       - NUXEO_PACKAGES
