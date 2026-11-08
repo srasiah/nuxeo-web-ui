@@ -55,10 +55,6 @@ vars:
   # Set on the command: an env: block loses to a JAVA_HOME already in the shell, and SDKMAN always sets one
   MVN: "JAVA_HOME={{.JAVA_HOME}} {{.MVN_BIN}} ${MVN_ARGS:-}"
 
-  NUXEO_PLUGIN_WEBUI_FILE_PATH:
-    sh: scripts/task/env-default.sh NUXEO_PLUGIN_WEBUI_FILE_PATH "./plugin/web-ui/marketplace/target/*.zip"
-  NUXEO_BENCHMARK_MARKETPLACE_PATH:
-    sh: scripts/task/env-default.sh NUXEO_BENCHMARK_MARKETPLACE_PATH "~/your-projects/nuxeo/docker/nuxeo-benchmark/marketplace/"
 
   DISTRIBUTION_ID:
     sh: scripts/task/env-default.sh DISTRIBUTION_ID
@@ -214,18 +210,6 @@ tasks:
       - rm -rf .tmp/
 
   # ── Deploy ───────────────────────────────────────────────────────────────────
-
-  copy-to-benchmark:
-    desc: Copy marketplace zip to local nuxeo-benchmark marketplace directory
-    cmds:
-      - cp {{.NUXEO_PLUGIN_WEBUI_FILE_PATH}} {{.NUXEO_BENCHMARK_MARKETPLACE_PATH}}
-      - echo "Marketplace package copied to {{.NUXEO_BENCHMARK_MARKETPLACE_PATH}}"
-
-  deploy-plugin:
-    desc: Build marketplace package (skip tests) and copy it to the benchmark marketplace directory
-    cmds:
-      - task: mvn:build-skip-tests
-      - task: copy-to-benchmark
 
   deploy:
     desc: Deploy Maven artifacts to the configured distribution repository (DISTRIBUTION_ID/DISTRIBUTION_URL/DISTRIBUTION_SNAPSHOTS_URL)
